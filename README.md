@@ -6,3 +6,7 @@ During the summer, along with other projects I've written in python, I've had th
 I did not think of uploading my works to github, so...yeah no significant progress can be shown for the lexer, parser, and parts of the semantic analyzer. (no proof = didn't do it?)
 Anyway, that's about it, this is a compiler (translates text files into assembly code, and let the REAL smart people assemble the code into binary) written in python without classes, I specify no classes because every tutorial I've come across is just filled with class related stuff like __init__ or whatever the fuck, it's just annoying, everything's indented, there's duplicate naming of variables (I'm talking about how you have to (a variation of because I forgor) write "this.name = name"), I loath everything about classes.
 Instead, my code is just functions and variables (mostly dicts and strings)
+
+This is how I used to structure my code, before I learned about github: 
+<img width="1365" height="714" alt="image" src="https://github.com/user-attachments/assets/52b1f64d-ed8e-4e51-b622-bd2ee603f727" />
+Just thought I'd add that to show I wasn't just spawning the project out of nowhere (I'm really paranoid about not showing my work, just ask my math teacher)
