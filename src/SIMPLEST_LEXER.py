@@ -1,7 +1,5 @@
 from helper import *
-from globals import *
-from json_funcs import write_to_json, read_from_json
-from Errors import *
+from json_funcs import write_to_json
 
 INPUT_FILENAME = "test.txt"
 OUTPUT_FILENAME = "lexed.txt"

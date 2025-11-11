@@ -1,5 +1,4 @@
 from json_funcs import *
-from helper import *
 
 INPUT_FILE = "parsed.txt"
 OUTPUT_FILE = "sem_checked.txt"
