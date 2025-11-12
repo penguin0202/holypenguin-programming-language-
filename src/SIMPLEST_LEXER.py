@@ -1,16 +1,16 @@
 from helper import *
 from json_funcs import write_to_json
 
-INPUT_FILENAME = "test.txt"
-OUTPUT_FILENAME = "lexed.txt"
+INPUT_FILENAME = "test/test.txt"
+OUTPUT_FILENAME = "test/lexed.txt"
 
 # I am not caring about tab size right now regarding position tracking
 
 def error(text): raise Exception(text)
 
-def isDigit(thing): return thing in "0123456789"
+def isDigit(thing): return thing in NUMBERS
 # includes underscore
-def isAlpha(thing): return thing in "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+def isAlpha(thing): return thing in ALLOWED_IN_NAMING
 
 code = []
 with open(INPUT_FILENAME, "r") as file:

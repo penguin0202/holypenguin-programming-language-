@@ -1,7 +1,7 @@
 from json_funcs import *
 
-INPUT_FILE = "parsed.txt"
-OUTPUT_FILE = "sem_checked.txt"
+INPUT_FILE = "test/parsed.txt"
+OUTPUT_FILE = "test/semantically-analyzed.txt"
 
 statements = read_from_json(INPUT_FILE)
 symbol_table = [{}]

@@ -1,9 +1,7 @@
 from json_funcs import *
-from parser_helper import *
-from Errors import *
 
-INPUT_FILENAME = "lexed.txt"
-OUTPUT_FILENAME = "parsed.txt"
+INPUT_FILENAME = "test/lexed.txt"
+OUTPUT_FILENAME = "test/parsed.txt"
 
 '''# there is not variable_initialization function because that would require context
 
@@ -11,6 +9,9 @@ def var_del(name):
     return {"type": "var_del", "name": name}'''
 
 # if you worry about pointers at any point in time during the developmental phase of this project, i will slime you out taiwanigga
+
+def get_type(thing): return thing["type"]
+def get_value(thing): return thing["value"]
 
 def error(text): raise Exception(text)
 
@@ -155,6 +156,7 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
 
     return left
 
+# no named arguments
 def parse_function_arguments() -> list: 
     arguments = []
     # make it so that once a named parameter is, well, named, all consecutive parameter assignation must also be named
@@ -166,24 +168,6 @@ def parse_function_arguments() -> list:
         RequireComma()
     RequireClosingParen()
     return arguments
-# im sorry, but im gonna have to prune my use of named arguments, as that complicates things too much
-# however, if you were to change your mind, ehre is the code <3: 
-'''def parse_function_arguments() -> list: 
-    arguments = []
-    # make it so that once a named parameter is, well, named, all consecutive parameter assignation must also be named
-    # look at you using fancy words
-    while tokens: 
-        if match(")"): break
-        if not match("identifier"): return {"type": "unnamed", "value": parse_expression()}
-        name = peek()
-        if peek(index=1)["type"] != ":": return {"type": "unnamed", "value": parse_expression()}
-        consume() # identifier: 
-        consume() # :
-        arguments.append({"type": "named", "name": name, "value": parse_expression()})
-        if match(")"): break
-        RequireComma()
-    RequireClosingParen()
-    return arguments'''
 
 def parse_block() -> list: 
     statements = []

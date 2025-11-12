@@ -13,6 +13,7 @@ ALLOWED = ALPHABETS + NUMBERS + WHITESPACES + "_" + "()[]{}" + "~`\"\':;,.|\\=^$
 def Literal(datatype, value): return {"type": "literal", "datatype": datatype, "value": value}
 def Identifier(name): return {"type": "identifier", "value": name}
 def Datatype(name): return {"type": "datatype", "value": name}
+def Keyword(name): return {"type": "keyword", "value": name}
 
 def determine_name(name): 
     if name in ["if", "else", "while", "return", "break", "continue", "extern"]: return Keyword(name)
