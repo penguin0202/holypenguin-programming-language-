@@ -16,7 +16,7 @@ def Datatype(name): return {"type": "datatype", "value": name}
 def Keyword(name): return {"type": "keyword", "value": name}
 
 def determine_name(name): 
-    if name in ["if", "else", "while", "return", "break", "continue", "extern"]: return Keyword(name)
-    elif name in ["fn", "int", "str", "bool", "char"]: return Datatype(name)
+    if name in ["fn", "if", "else", "while", "return", "break", "continue", "extern"]: return Keyword(name)
+    elif name in ["float", "int", "str", "bool", "char"]: return Datatype(name)
     elif name in ["true", "false"]: return Literal("bool", name)
     return Identifier(name)

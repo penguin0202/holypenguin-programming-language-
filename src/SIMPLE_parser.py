@@ -73,7 +73,6 @@ PRECEDENCE = {
     "(": 100,
 }
 
-
 def RequireComma(): eat_thing(",", "Expected type:,")
 def RequireSemicolon(): eat_thing(";", "Expected type:;")
 def RequireStartingBrace(): eat_thing("{", "Expected type:{")
@@ -86,7 +85,7 @@ def RequireClosingBracket(): eat_thing("]", "Expected type:]")
 
 def peek_is_else(): return match("keyword") and get_value(peek()) == "else"
 def peek_is_while(): return match("keyword") and get_value(peek()) == "while"
-def peek_is_fn(): return match("datatype") and get_value(peek()) == "fn"
+def peek_is_fn(): return match("keyword") and get_value(peek()) == "fn"
 
 tokens = read_from_json(INPUT_FILENAME)
 ast = []
@@ -99,7 +98,7 @@ def eat_thing(thing, err):
     if not match(thing): error(err)
     consume()
 
-def peek(index=0): return tokens[index] if tokens else None
+def peek(): return tokens[0] if tokens else None
 def consume(): return tokens.pop(0) if tokens else None
 def match(thing): return get_type(peek()) == thing # peeks, doesnt consume, matches its type to the given thing
 
@@ -207,7 +206,6 @@ def parse_function_parameters() -> list:
 def parse_datatype() -> str: 
     if not match("datatype"): error("Expected type:datatype")
     datatype = get_value(consume())
-    if datatype == "fn": error("unfortunately, by datatype in this context i exclude functions, because i dont yet know how to return fns from fns")
     return datatype
 
 def parse_statement() -> dict: 
@@ -219,16 +217,15 @@ def parse_statement() -> dict:
         return {"type": "just_a_block", "code": parse_block()}
     if token_type == "datatype": 
         consume()
-        datatype = token["value"] # must be fn, int, bool, etc
-        if datatype == "fn": return parse_fn()
-        else: # is variable
-            name = consume_name()
-            RequireSemicolon()
-            return {"type": "var_decl", "name": name, "datatype": datatype}
-            # no variable declaration an dinitialization in the same place
+        datatype = token["value"] 
+        name = consume_name()
+        RequireSemicolon()
+        return {"type": "var_decl", "name": name, "datatype": datatype}
+        # no variable declaration an dinitialization in the same place
     if token_type == "keyword": 
         consume()
         match get_value(token): 
+            case "fn": parse_fn()
             case "extern": # right now this only works with functions, not any variables, plz add functionality
                 if not peek_is_fn(): error("Expected type:datatype, value:fn")
                 consume() # datatype:fn

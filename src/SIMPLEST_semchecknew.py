@@ -191,30 +191,31 @@ def expression_type(expression):
         case "fn_call": # {"type": "fn_call", "name": left, "args": parse_function_arguments()}
             # check if function exists
             # then check if parameters are correct-o
-            name = expression["name"]["value"] # im not sure about the ["value"] placement
-            if not symbol_exists(name): error("Function undeclared")
-            fn = assert_function(lookup_symbol(name), "eh... calling a non-function as a function much?")
+            # name = expression["name"]["value"] # im not sure about the ["value"] placement
+            # if not symbol_exists(name): error("Function undeclared")
+            # fn = assert_function(lookup_symbol(name), "eh... calling a non-function as a function much?")
             # grab datatypes from arguments
             # check if parameters work
-            given_datatypes = []
-            for exp in expression["args"]: 
-                given_datatypes.append(expression_type(exp))
-            given_datatypes = tuple(given_datatypes)
+            # given_datatypes = []
+            # for exp in expression["args"]: 
+            #    given_datatypes.append(expression_type(exp))
+            # given_datatypes = tuple(given_datatypes)
             # now, given_datatypes is a list of strings, each string represents its corresponding -
             # argument's resulting datatype
 
-            existing_datatypes_S = fn["set"].keys()
-            if given_datatypes not in existing_datatypes_S: error(f"function '{fn} does not have '{given_datatypes}' as a function signature parameters?")
+            # existing_datatypes_S = fn["set"].keys()
+            # if given_datatypes not in existing_datatypes_S: error(f"function '{fn} does not have '{given_datatypes}' as a function signature parameters?")
 
             # i assumey-sume that if code executes to this line, it means that every has gone smoothly ->
             # function exists, and the datatypes of the arguments match one of the 
             # possible list of datatypes inside the set of the function
             # i think i just have ot return the datatype of the function now!!!! yay im so proud of you!!! :)
-            return fn["set"][given_datatypes]["returns"]
+            # return fn["set"][given_datatypes]["returns"]
 
             # ignoring named arguments because WHY THE FUCK DID YOU THINK I CAN DO THIS TAIWANGA
             # then, get the datatypes of given parameters
             # use that to get the return inside the set of a function
+            pass
         case "identifier": 
             name = expression["value"]
             if not symbol_exists(name): error("Variable undeclared")
