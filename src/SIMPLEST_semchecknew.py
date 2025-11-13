@@ -1,48 +1,41 @@
 from json_funcs import *
+from semcheckhelper import *
 
 INPUT_FILE = "test/parsed.txt"
 OUTPUT_FILE = "test/semantically-analyzed.txt"
 
 statements = read_from_json(INPUT_FILE)
-symbol_table = [{}]
+symbol_table = []
 
 def assert_numerical(thing, msg) -> str: 
     thing_type = expression_type(thing)
-    if thing_type not in ["int", "float"]: error(msg)
+    if thing_type not in [INT, FLOAT]: error(msg)
     return thing_type
 
 def assert_int(thing, msg) -> str: 
     thing_type = expression_type(thing)
-    if thing_type != "int": error(msg)
-    return "int"
+    if thing_type != INT: error(msg)
+    return INT
 
 def assert_float(thing, msg) -> str: 
     thing_type = expression_type(thing)
-    if thing_type != "float": error(msg)
-    return "float"
+    if thing_type != FLOAT: error(msg)
+    return FLOAT
 
 def assert_bool(thing, msg) -> str: 
     thing_type = expression_type(thing)
-    if thing_type != "bool": error(msg)
-    return "bool"
+    if thing_type != BOOL: error(msg)
+    return BOOL
 
 def assert_text(thing, msg) -> str: 
     thing_type = expression_type(thing)
-    if thing_type not in ["str", "char"]: error(msg)
+    if thing_type not in [STR, CHAR]: error(msg)
     return thing_type
 
 def assert_str(thing, msg) -> str: 
     thing_type = expression_type(thing)
-    if thing_type != "str": error(msg)
-    return "str"
-
-def assert_variable(symbol, msg): 
-    if symbol["kind"] != "variable": error(msg)
-    return symbol
-
-def assert_function(symbol, msg): 
-    if symbol["kind"] != "function": error(msg)
-    return symbol
+    if thing_type != STR: error(msg)
+    return STR
 
 # check if value is assignable
 # expression is 
@@ -87,33 +80,10 @@ def add_variable_symbol(name, datatype) -> None:
     if not symbol_table: error("Cannot add symbol, no scope exists")
     current_scope = symbol_table[-1]
     if name in current_scope: error(f"Symbol ({name["kind"]}) with this name already exists in your current scope!")
-    symbol_table[-1][name] = {"kind": "variable", "datatype": datatype}
+    current_scope[name] = {"kind": "variable", "datatype": datatype}
     # right now, symbol tables only store datatypes, no values, so during compilation, if sem check is the only
     # step that stores variable data, then there will be no code that can check for overflows at compile time
     # or div by 0 by that matter
-
-# this also checks for duplicate parameter names
-def grab_fn_signature(parsed_fn) -> tuple: 
-    #guard
-    type = parsed_fn["type"]
-    if type not in ["fn_decl", "external_function_declaration"]: error("expected a parsed function dictionary")
-    
-    name = parsed_fn["name"]
-    returns = parsed_fn["returns"]
-    parameter_datatypes = parsed_fn["param_datatypes"]
-    parameter_names = parsed_fn["param_names"]
-    # code = parsed_fn["block"]
-
-    # PARAM CHECK----------
-    seen_parameter_names = []
-
-    for name in parameter_names: 
-        # does not care about type of duplicate name
-        if name in seen_parameter_names: error(f"duplicate parameter '{name}'")
-        seen_parameter_names.append(name)
-    # PARAM CHECK DONE -------
-
-    return name, returns, parameter_datatypes, parameter_names #, code
 
 def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
     if not symbol_table: error("Cannot add symbol, no scope exists")
@@ -169,9 +139,14 @@ def lookup_symbol(name) -> dict:
         if name in scope: return scope[name]
     error("symbol does not exist anywhere")
 
-def error(text) -> None: raise Exception(text)
+def push_scope(node=None) -> None: 
+    # using python references (necessary evil)
+    parent = symbol_table[-1] if symbol_table else None
+    singular_symbol_table = {"symbols" : {}, "parent": parent}
+    if node is not None: node["symbol_table"] = singular_symbol_table
+    symbol_table.append(singular_symbol_table)
+    # symbol_table.append({})
 
-def push_scope() -> None: symbol_table.append({})
 def pop_scope() -> None | dict: 
     if not symbol_table: error("cannot pop scope if symbol table is empty")
     symbol_table.pop() # popped last item, aka last inserted item
@@ -224,7 +199,7 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
         case "not_expr": # {"type": "not_expr", "operand": parse_atom()}
             operand = expression["operand"]
             assert_bool(operand, "not unary oepration can only work on boolean values")
-            return "bool"
+            return BOOL
         case "unary_assignment": # left = {"type": "unary_assignment", "operator": operator, "variable": left}
             operator = expression["operator"]
             variable = lvalue_assert(expression["variable"])
@@ -257,8 +232,8 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
                     lvalue_datatype = assert_numerical(lvalue, "must be a numerical type")
 
                     # check l-value
-                    if lvalue_datatype == "int": assert_int(rvalue, "if lvalue is an int, then rvalue must be too, because what do you mean add 3.5 to an integer variable")
-                    if lvalue_datatype == "float": assert_numerical(rvalue, "if lvalue is a float, then rvalue can be anything, albeit numerical")
+                    if lvalue_datatype == INT: assert_int(rvalue, "if lvalue is an int, then rvalue must be too, because what do you mean add 3.5 to an integer variable")
+                    if lvalue_datatype == FLOAT: assert_numerical(rvalue, "if lvalue is a float, then rvalue can be anything, albeit numerical")
 
                 case "/=": 
                     # variable must be float type, because this is true division that results in floats every time, even if it's 6/2
@@ -276,6 +251,7 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
                     # check ^ datatype -- is it a string (if it is a char, then it can't concatenate, that would result in a string)
                     assert_str(lvalue, "l-value must be a string or a character")
                     assert_text(rvalue, "r-value must be a string or a character")
+
         case "binary_expr": # a general binary expression
             # to be consistent, division will always result in floats, but inputs can be any num
             # idk about modulo or remainder, they all have to be integers tho, keep that in mind, davide-o
@@ -284,24 +260,23 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
             right = expression["right"]
 
             match operator: 
-                case "==" | "!=": return "bool" # dont need to check types?
+                case "==" | "!=": return BOOL # dont need to check types?
 
                 case "&" | "?" | "&?": 
                     assert_bool(left, "logical operators must have boolean values on the left")
                     assert_bool(right, "logical operators must have boolean values on the right")
-                    return "bool"
+                    return BOOL
                 
                 case "<" | ">" | "<=" | ">=": 
                     assert_numerical(left, "left datatype must be an int or float for numerical comparisons")
                     assert_numerical(right, "right datatype must be an int or float for numerical comparisons")
-                    return "bool"
+                    return BOOL
                 
                 case "+" | "-" | "*": 
                     left_datatype = assert_numerical(left, "left datatype must be an int or float for numerical comparisons")
                     right_datatype = assert_numerical(right, "right datatype must be an int or float for numerical comparisons")
-                    
-                    if (left_datatype, right_datatype) == ("int", "int"): return "int"
-                    return "float"
+
+                    return INT if (left_datatype, right_datatype) == (INT, INT) else FLOAT
                 
                 # this is true division, so result will always be a float, even if it's 6 / 2, itll result in 3.0
                 # for integer division, we can make it an operator, or just a function (for "a INT_DIV b", itll result in "toInt(a / b)")
@@ -310,23 +285,23 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
                 case "/": 
                     assert_numerical(left, "left datatype must be numerical for division")
                     assert_numerical(right, "right datatype must be numerical for division")
-                    return "float"
+                    return FLOAT
 
                 # cannot work on floating point numbers
                 case "|": 
                     assert_int(left, "left datatype must be an int for quotient-ding")
                     assert_int(right, "right datatype must be an int for quotient-ding")
-                    return "int"
+                    return INT
                 # cannot work on floating point numbers, handle modulus vs remainder later, right now it checks integers, not >0 ints
                 case "%": 
                     assert_int(left, "left datatype must be an int for mod-ding")
                     assert_int(right, "right datatype must be an int for mod-ding")
-                    return "int"
+                    return INT
                 
                 case "~": 
                     assert_text(left, "left datatype must be str or char")
                     assert_text(right, "right datatype must be str or char")
-                    return "str" # no matter if it's char ~ char, it's going to be str regardless
+                    return STR # no matter if it's char ~ char, it's going to be str regardless
 
 def analyze_statementS(statementS) -> None: 
     for statement in statementS:
@@ -334,13 +309,18 @@ def analyze_statementS(statementS) -> None:
 
 def analyze_statement(statement) -> None: 
     match statement["type"]:
+        case "module": 
+            code = statement["code"]
+            push_scope(code)
+            analyze_statementS(code)
+            pop_scope()
         case "var_decl": # {"type": "var_decl", "name": name, "datatype": datatype}
             name = statement["name"]
             datatype = statement["datatype"]
             add_variable_symbol(name, datatype)
         case "just_a_block": # {"type": "just_a_block", "code": parse_block()}
             code = statement["code"]
-            push_scope()
+            push_scope(code)
             # this part is looping through the "code" block inside the "just_a_block" and type checking everything inside IT
             analyze_statementS(code)
             pop_scope()
@@ -359,8 +339,13 @@ def analyze_statement(statement) -> None:
 
             code = statement["block"]
 
-            push_scope()
+            push_scope(code)
             enter_function(name, parameter_datatypes, parameter_names, returns)
+
+            # add parameters into the function (along the rest of the local variables)
+            for param_name, param_datatype in zip(parameter_names, parameter_datatypes): 
+                add_variable_symbol(param_name, param_datatype)
+
             analyze_statementS(code)
             # HOLY FUCKING SHIT I DID IT
             # someone give me headpats right now
@@ -384,7 +369,7 @@ def analyze_statement(statement) -> None:
             assert_bool(condition, "conditions (in an if) must be a boolean (what'd you expect)")
             # check condition here?
             code = statement["if-then_block"]
-            push_scope()
+            push_scope(code)
             analyze_statementS(code)
             pop_scope()
         case "if_else_stmnt": # {'type': 'if_else_stmnt', 'condition': exp, 'if-then_block': if_block, 'else_block': parse_block()}
@@ -398,10 +383,10 @@ def analyze_statement(statement) -> None:
             code_then = statement["if-then_block"]
             code_else = statement["else_block"]
 
-            push_scope() # the if part starts
+            push_scope(code_then) # the if part starts
             analyze_statementS(code_then)
             pop_scope() # the if part ends
-            push_scope() # the else part starts
+            push_scope(code_else) # the else part starts
             analyze_statementS(code_else)
             pop_scope() # the else part ends
 
@@ -411,7 +396,8 @@ def analyze_statement(statement) -> None:
             assert_bool(condition, "conditions (in a while loop) must be a boolean (what'd you expect)")
             
             code = statement["while_block"]
-            push_scope()
+            push_scope(code)
+            global in_loop
             is_loop = True
             analyze_statementS(code)
             is_loop = False

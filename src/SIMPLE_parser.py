@@ -71,7 +71,10 @@ def RequireClosingBracket(): eat_thing("]", "Expected type:]")
 def peek_is_fn(): return match("keyword") and get_value(peek()) == "fn"
 
 tokens = read_from_json(INPUT_FILENAME)
-ast = []
+ast = {
+    "type": "module", 
+    "code": []
+}
 
 def consume_name():
     if not match("identifier"): error("Expected type:identifier")
@@ -245,6 +248,7 @@ def parse_statement() -> dict:
     RequireSemicolon()
     return {"type": "expr_stmnt", "expression": expr}
 
-while tokens: ast.append(parse_statement())
+while tokens: 
+    ast["code"].append(parse_statement())
 
 write_to_json(OUTPUT_FILENAME, ast)
