@@ -15,21 +15,6 @@ def get_value(thing): return thing["value"]
 
 def error(text): raise Exception(text)
 
-# associativity if want: precedence + int(ASSOCIATIVITY.get(operator, "left") == "left")
-"""ASSOCIATIVITY = {
-    "=": "right",
-    "+=": "right",
-    "-=": "right",
-    "*=": "right",
-    "/=": "right",
-    "%=": "right",
-    "~=": "right",
-    "|=": "right",
-    "++": "right",
-    "--": "right",
-    "!!": "right",
-}"""
-
 PRECEDENCE = {
     "=": 1,
 
@@ -83,8 +68,6 @@ def RequireClosingParen(): eat_thing(")", "Expected type:)")
 def RequireStartingBracket(): eat_thing("[", "Expected type:[")
 def RequireClosingBracket(): eat_thing("]", "Expected type:]")
 
-def peek_is_else(): return match("keyword") and get_value(peek()) == "else"
-def peek_is_while(): return match("keyword") and get_value(peek()) == "while"
 def peek_is_fn(): return match("keyword") and get_value(peek()) == "fn"
 
 tokens = read_from_json(INPUT_FILENAME)
@@ -227,7 +210,7 @@ def parse_statement() -> dict:
         match get_value(token): 
             case "fn": parse_fn()
             case "extern": # right now this only works with functions, not any variables, plz add functionality
-                if not peek_is_fn(): error("Expected type:datatype, value:fn")
+                if not match("keyword") or get_value(peek()) != "fn": error("Expected type:datatype, value:fn")
                 consume() # datatype:fn
                 datatype = parse_datatype()
                 name = consume_name()
@@ -248,11 +231,13 @@ def parse_statement() -> dict:
             case "if": 
                 exp = parse_expression()
                 RequireStartingBrace()
-                if not peek_is_else(): return {'type': 'if_stmnt', 'condition': exp, 'if-then_block': parse_block()} # None/eof or its just not else
                 if_block = parse_block()
-                consume() # keyword:else
-                RequireStartingBrace()
-                return {'type': 'if_else_stmnt', 'condition': exp, 'if-then_block': if_block, 'else_block': parse_block()}
+                if not match("keyword") or get_value(peek()) != "else": 
+                    return {'type': 'if_stmnt', 'condition': exp, 'if-then_block': if_block} # None/eof or its just not else
+                else: 
+                    consume() # keyword:else
+                    RequireStartingBrace()
+                    return {'type': 'if_else_stmnt', 'condition': exp, 'if-then_block': if_block, 'else_block': parse_block()}
             case _: error("keyword not keyword, dev error")
 
     # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
