@@ -6,35 +6,35 @@ OUTPUT_FILE = "test/semantically-analyzed.txt"
 statements = read_from_json(INPUT_FILE)
 symbol_table = [{}]
 
-def assert_numerical(thing, msg): 
+def assert_numerical(thing, msg) -> str: 
     thing_type = expression_type(thing)
     if thing_type not in ["int", "float"]: error(msg)
     return thing_type
 
-def assert_int(thing, msg): 
+def assert_int(thing, msg) -> str: 
     thing_type = expression_type(thing)
     if thing_type != "int": error(msg)
-    return thing_type
+    return "int"
 
-def assert_float(thing, msg): 
+def assert_float(thing, msg) -> str: 
     thing_type = expression_type(thing)
     if thing_type != "float": error(msg)
-    return thing_type
+    return "float"
 
-def assert_bool(thing, msg): 
+def assert_bool(thing, msg) -> str: 
     thing_type = expression_type(thing)
     if thing_type != "bool": error(msg)
-    return thing_type
+    return "bool"
 
-def assert_text(thing, msg): 
+def assert_text(thing, msg) -> str: 
     thing_type = expression_type(thing)
     if thing_type not in ["str", "char"]: error(msg)
     return thing_type
 
-def assert_str(thing, msg): 
+def assert_str(thing, msg) -> str: 
     thing_type = expression_type(thing)
     if thing_type != "str": error(msg)
-    return thing_type
+    return "str"
 
 def assert_variable(symbol, msg): 
     if symbol["kind"] != "variable": error(msg)
@@ -67,9 +67,9 @@ def lvalue_assert(expression, msg):
 # [ {"name": name, "params": params}, {"name": name, "params": params}, ...]
 function_context = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
 def enter_function(name, param_datatypes, param_names, returns): function_context.append({"name": name, "parameter_datatypes": param_datatypes, "parameter_names": param_names, "returns": returns})
-def exit_function(): function_context.pop(-1)
-def current_function(): return function_context[-1]
-def is_inside_function(): return len(function_context) > 0
+def exit_function() -> None: function_context.pop(-1)
+def current_function() -> dict: return function_context[-1]
+def is_inside_function() -> bool: return len(function_context) > 0
 
 # did not make a loop_context because i dont think i need to store any metadata regarding the loop
 # other than that I am in one so i can validate breka and continue statements
@@ -83,7 +83,7 @@ def enter_while_loop(): loops_context.push(0)
 def exit_while_loop(): loops_context.pop()
 def is_inside_while_loop(): return len(loops_context) > 0'''
 
-def add_variable_symbol(name, datatype): 
+def add_variable_symbol(name, datatype) -> None: 
     if not symbol_table: error("Cannot add symbol, no scope exists")
     current_scope = symbol_table[-1]
     if name in current_scope: error(f"Symbol ({name["kind"]}) with this name already exists in your current scope!")
@@ -92,14 +92,8 @@ def add_variable_symbol(name, datatype):
     # step that stores variable data, then there will be no code that can check for overflows at compile time
     # or div by 0 by that matter
 
-def grab_datatypes_from_parameters(param_list): 
-    list_of_datatypes = []
-    for param in param_list: 
-        if "datatype" not in param.keys(): error("dev error, whoever called this function did not provide an actual parameter list")
-        list_of_datatypes.append(param["datatype"])
-
 # this also checks for duplicate parameter names
-def grab_fn_signature(parsed_fn): 
+def grab_fn_signature(parsed_fn) -> tuple: 
     #guard
     type = parsed_fn["type"]
     if type not in ["fn_decl", "external_function_declaration"]: error("expected a parsed function dictionary")
@@ -121,7 +115,7 @@ def grab_fn_signature(parsed_fn):
 
     return name, returns, parameter_datatypes, parameter_names #, code
 
-def add_function_symbol(name, param_datatypes, param_names, returns): # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
+def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
     if not symbol_table: error("Cannot add symbol, no scope exists")
     current_scope = symbol_table[-1]
     if name in current_scope: 
@@ -165,25 +159,25 @@ def add_function_symbol(name, param_datatypes, param_names, returns): # {'type':
         }
         # key of inside set is an tuple, because those are hashable or something idfk fucking python
 
-def symbol_exists(name): 
+def symbol_exists(name) -> bool: 
     for scope in reversed(symbol_table): 
         if name in scope: return True
     return False
 
-def lookup_symbol(name): 
+def lookup_symbol(name) -> dict: 
     for scope in reversed(symbol_table): 
         if name in scope: return scope[name]
     error("symbol does not exist anywhere")
 
-def error(text): raise Exception(text)
+def error(text) -> None: raise Exception(text)
 
-def push_scope(): symbol_table.append({})
-def pop_scope(): 
+def push_scope() -> None: symbol_table.append({})
+def pop_scope() -> None | dict: 
     if not symbol_table: error("cannot pop scope if symbol table is empty")
     symbol_table.pop() # popped last item, aka last inserted item
     return # you can return the popped scope by putting the above here, but right now i have no sue of debugging yet (sue? i meant use)
 
-def expression_type(expression):
+def expression_type(expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
     # also handles assignment; the parser already checked that expressions can have - 
     # at most 1 assignment, and its position is going to be in expr_stmnt s
     match expression["type"]: 
@@ -334,11 +328,11 @@ def expression_type(expression):
                     assert_text(right, "right datatype must be str or char")
                     return "str" # no matter if it's char ~ char, it's going to be str regardless
 
-def analyze_statementS(statementS): 
+def analyze_statementS(statementS) -> None: 
     for statement in statementS:
         analyze_statement(statement)
 
-def analyze_statement(statement): 
+def analyze_statement(statement) -> None: 
     match statement["type"]:
         case "var_decl": # {"type": "var_decl", "name": name, "datatype": datatype}
             name = statement["name"]

@@ -6,11 +6,11 @@ OUTPUT_FILENAME = "test/lexed.txt"
 
 # I am not caring about tab size right now regarding position tracking
 
-def error(text): raise Exception(text)
+def error(text) -> None: raise Exception(text)
 
-def isDigit(thing): return thing in NUMBERS
+def isDigit(thing) -> bool: return thing in NUMBERS
 # includes underscore
-def isAlpha(thing): return thing in ALLOWED_IN_NAMING
+def isAlpha(thing) -> bool: return thing in ALLOWED_IN_NAMING
 
 code = []
 with open(INPUT_FILENAME, "r") as file:
@@ -18,12 +18,12 @@ with open(INPUT_FILENAME, "r") as file:
 if code == []: error("FileEmptySoTokenEmpty")
 tokens = []
 
-def EOF(): return len(code) == 0
-def consume(): return None if EOF() else code.pop(0)
-def peek(): return None if EOF() else code[0]
-def push(token): tokens.append({"type": token})
-def push_complicated(token): tokens.append(token)
-def match(token): return peek() == token
+def EOF() -> bool: return len(code) == 0
+def consume() -> dict: return None if EOF() else code.pop(0)
+def peek() -> dict: return None if EOF() else code[0]
+def push(token) -> None: tokens.append({"type": token})
+def push_complicated(token) -> None: tokens.append(token)
+def match(token) -> bool: return peek() == token
 
 while not EOF(): 
     match char := consume(): 
@@ -177,8 +177,6 @@ while not EOF():
             if EOF(): error("UnterminatedCharLiteral")
             if consume() != "\'": error("CharTooLong")
             push_complicated(Literal("char", character))
-        
-        
         
         case "\\": error("Unexpected backslash outside of a string or char")
         case "#": error("NotImplementedError(dereference operator, but i dont want to deal with it right now)")
