@@ -130,7 +130,7 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
                     "variable": left,
                     "value": parse_expression(precedence+1),
                 }
-            # i used to have |= as appending to a list, but right now i am not working on lists (and thats okay!)
+            # operator for appending lists?
             case _: 
                 left = {
                     "type": "binary_expr",
@@ -200,7 +200,7 @@ def parse_statement() -> dict:
     token_type = get_type(token)
     if token_type == "{": 
         consume() # {
-        return {"type": "just_a_block", "code": parse_block()}
+        return {"type": "block", "block": parse_block()}
     if token_type == "datatype": 
         consume()
         datatype = token["value"] 
@@ -219,34 +219,34 @@ def parse_statement() -> dict:
                 name = consume_name()
                 RequireStartingParen()
                 parameters = parse_function_parameters()
-                return {"type": "external_function_declaration", "name": name, "returns": datatype, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"]}
-            case "break": return {"type": "break_stmnt"}
-            case "continue": return {"type": "continue_stmnt"}
+                return {"type": "external_fn", "name": name, "returns": datatype, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"]}
+            case "break": return {"type": "break"}
+            case "continue": return {"type": "continue"}
             case "else": error("what is ts doing here dawg") # not a 'top-level' statement starter, only can use in conjunction of if in front
             case "return": 
                 exp = parse_expression()
                 RequireSemicolon()
-                return {"type": "return_stmnt", "value": exp}
+                return {"type": "return", "value": exp}
             case "while": 
                 exp = parse_expression()
                 RequireStartingBrace()
-                return {'type': 'while_stmnt', 'condition': exp, 'while_block': parse_block()}
+                return {'type': 'while', 'condition': exp, 'block': parse_block()}
             case "if": 
                 exp = parse_expression()
                 RequireStartingBrace()
                 if_block = parse_block()
                 if not match("keyword") or get_value(peek()) != "else": 
-                    return {'type': 'if_stmnt', 'condition': exp, 'if-then_block': if_block} # None/eof or its just not else
+                    return {'type': 'if', 'condition': exp, 'block': if_block} # None/eof or its just not else
                 else: 
                     consume() # keyword:else
                     RequireStartingBrace()
-                    return {'type': 'if_else_stmnt', 'condition': exp, 'if-then_block': if_block, 'else_block': parse_block()}
+                    return {'type': 'if_else', 'condition': exp, 'then-block': if_block, 'else-block': parse_block()}
             case _: error("keyword not keyword, dev error")
 
     # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
     expr = parse_expression(allow_assignment=True)
     RequireSemicolon()
-    return {"type": "expr_stmnt", "expression": expr}
+    return {"type": "expr", "expression": expr}
 
 while tokens: 
     ast["code"].append(parse_statement())
