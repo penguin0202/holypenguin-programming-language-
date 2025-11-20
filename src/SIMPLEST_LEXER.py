@@ -112,12 +112,6 @@ while not EOF():
                 consume()
                 push("==")
             else: push("=")
-        
-        case "|": 
-            if match("="): 
-                consume()
-                push("|=")
-            else: push("|")
 
         case ";": push(";")
         case ",": push(",")
@@ -185,20 +179,13 @@ while not EOF():
         case ":": error("NotImplementedError(i think this is going to be used in dictionaries, and in function named parameters)")
 
         case _: 
-            if isDigit(char): # floats must have leading zeroes
+            if isDigit(char): # i dont care about floats anymore
                 number = char
-                dot_found = False
                 while True:
                     char = peek()
-                    if isDigit(char): number += consume()
-                    elif char == ".":
-                        if dot_found: error("TooManyFloatDots")
-                        dot_found = True
-                        number += consume()
-                        if EOF(): raise Exception("no trailing numbers for floats because eof")
-                        if not isDigit(peek()): raise Exception("no digits/numbers following the dot")
-                    else: break # None because eof or some other character
-                push_complicated(Literal("float" if dot_found else "int", number))
+                    if  not isDigit(char): break # None because eof or some other character
+                    number += consume()
+                push_complicated(Literal("int"))
             elif isAlpha(char): # name = keyword+identifier
                 # identifiers (variables, functions), keywords, literal:bools
                 name = char

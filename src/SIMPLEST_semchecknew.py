@@ -11,36 +11,6 @@ OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "semantically-analyzed.txt")
 statements = read_from_json(INPUT_FILENAME)
 symbol_table = []
 
-def assert_numerical(thing, msg) -> str: 
-    thing_type = expression_type(thing)
-    if thing_type not in [INT, FLOAT]: error(msg)
-    return thing_type
-
-def assert_int(thing, msg) -> str: 
-    thing_type = expression_type(thing)
-    if thing_type != INT: error(msg)
-    return INT
-
-def assert_float(thing, msg) -> str: 
-    thing_type = expression_type(thing)
-    if thing_type != FLOAT: error(msg)
-    return FLOAT
-
-def assert_bool(thing, msg) -> str: 
-    thing_type = expression_type(thing)
-    if thing_type != BOOL: error(msg)
-    return BOOL
-
-def assert_text(thing, msg) -> str: 
-    thing_type = expression_type(thing)
-    if thing_type not in [STR, CHAR]: error(msg)
-    return thing_type
-
-def assert_str(thing, msg) -> str: 
-    thing_type = expression_type(thing)
-    if thing_type != STR: error(msg)
-    return STR
-
 # check if expression (not the datatype of it) is assignable
 # variables
 # array accesses (in the future)
@@ -133,7 +103,8 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
     # also handles assignment; the parser already checked that expressions can have - 
     # at most 1 assignment, and its position is going to be in expr_stmnt s
     match expression["type"]: 
-        case "literal": return expression["datatype"]
+        case "literal":
+            return expression["datatype"]
 
         case "fn_call": # {"type": "fn_call", "name": left, "args": parse_function_arguments()}
             # check if function exists
@@ -172,26 +143,29 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
         
         case "negate_expr":
             operand = expression["operand"]
-            operand_datatype = assert_numerical(operand, "negation can only work on int and float values")
-            return operand_datatype # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
+            assert operand == INT
+            return INT # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
         
         case "not_expr":
             operand = expression["operand"]
-            assert_bool(operand, "not unary oepration can only work on boolean values")
+            assert operand == BOOL
             return BOOL
         
         case "unary_assignment":
             operator = expression["operator"]
             variable = lvalue_assert(expression["variable"])
+            vt = expression_type(variable)
             match operator:
-                case "!!": assert_bool(variable, "variable must be a boolean")
-                case "++" | "--": assert_numerical(variable, "variable must be int or float")
+                case "!!": assert vt == BOOL
+                case "++" | "--": assert vt == INT
 
         case "binary_assignment": # "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "~=": 
             operator = expression["operator"]
             lvalue = lvalue_assert(expression["variable"])
             # from now on, lvalues are already checked for actual lvalue
             rvalue = expression["value"]
+            lt = expression_type(lvalue)
+            rt = expression_type(rvalue)
             match operator: 
                 case "=": 
                     # check l-value
@@ -200,87 +174,53 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
                     # if expression_type(lvalue) != expression_type(rvalue): error(f"datatyps not compatable in variable assigning: expected '{lvalue_datatype}', got '{rvalue_datatype}'")
                     # i am not toooo sure about assigning 1 to a float variable, maybe i could promote it
                     # same with char into a string variable
-                    pass
+                    assert lt == rt
                 
-                case "+=" | "-=" | "*=": 
+                case "+=" | "-=" | "*=" | "/=" | "%=": 
                     # lvalue must be int or float
                     # if lvalue has a datatype of integer, then the rvalues can only result to an integer, because i cannot assign floats to an int
                     # if rvalue is a float though, then rvalue is anything goes, by anything goes i mean numerical thingies
 
-                    lvalue_datatype = assert_numerical(lvalue, "must be a numerical type")
+                    assert lt == INT
+                    assert rt == INT
 
-                    # check l-value
-                    if lvalue_datatype == INT: assert_int(rvalue, "if lvalue is an int, then rvalue must be too, because what do you mean add 3.5 to an integer variable")
-                    if lvalue_datatype == FLOAT: assert_numerical(rvalue, "if lvalue is a float, then rvalue can be anything, albeit numerical")
-
-                case "/=": 
                     # variable must be float type, because this is true division that results in floats every time, even if it's 6/2
                     # catch phrase is "as accurately as possible, while guranteeing uniformity"
-                    assert_float(lvalue, "l-value must be ints or floats")
-                    assert_numerical(rvalue, "r-value must be ints or floats")
-                
-                case "|=": 
-                    assert_int(lvalue, "lvalue must be an integer in an integer division")
-                    assert_int(rvalue, "rvalue must be an integer in an integer division")
-                case "%=": 
-                    assert_int(lvalue, "l-value must be an integer in a modulus assignment")
-                    assert_int(rvalue, "r-value must be an integer in a modulus assignment")
-
-                case "~=": 
-                    assert_str(lvalue, "l-value must be a string") # (if it is a char, then it can't concatenate, that would result in a string)
-                    assert_text(rvalue, "r-value must be a string or a character")
 
         case "binary_expr":
             operator = expression["operator"]
             left = expression["left"]
             right = expression["right"]
+            lt = expression_type(left)
+            rt = expression_type(right)
 
             match operator: 
-                case "==" | "!=": return BOOL # dont need to check types?
+                case "==" | "!=":
+                    return BOOL # dont need to check types?
 
                 case "&" | "?" | "&?": 
-                    assert_bool(left, "logical operators must have boolean values on the left")
-                    assert_bool(right, "logical operators must have boolean values on the right")
+                    assert lt == BOOL
+                    assert rt == BOOL
                     return BOOL
                 
                 case "<" | ">" | "<=" | ">=": 
-                    assert_numerical(left, "left datatype must be an int or float for numerical comparisons")
-                    assert_numerical(right, "right datatype must be an int or float for numerical comparisons")
+                    assert lt == INT
+                    assert rt == INT
                     return BOOL
                 
-                case "+" | "-" | "*": 
-                    left_datatype = assert_numerical(left, "left datatype must be an int or float for numerical comparisons")
-                    right_datatype = assert_numerical(right, "right datatype must be an int or float for numerical comparisons")
-
-                    return INT if (left_datatype, right_datatype) == (INT, INT) else FLOAT
+                case "+" | "-" | "*" | "/" | "%": 
+                    assert lt == INT
+                    assert rt == INT
+                    return INT
                 
                 # this is true division, so result will always be a float, even if it's 6 / 2, itll result in 3.0
                 # for integer division, we can make it an operator, or just a function (for "a INT_DIV b", itll result in "toInt(a / b)")
                 # toInt will either round towards 0, or to negative Infinity idkyet, make separate functions
                 # good job thinking of solutions!
                 # to be consistent, division will always result in floats, but inputs can be any num
-                case "/": 
-                    assert_numerical(left, "left datatype must be numerical for division")
-                    assert_numerical(right, "right datatype must be numerical for division")
-                    return FLOAT
-
-                # quotient must have integer inputs (and integer output ofc too)
-                case "|": 
-                    assert_int(left, "left datatype must be an int for quotient-ding")
-                    assert_int(right, "right datatype must be an int for quotient-ding")
-                    return INT
 
                 # modulo/remainder must have integer inputs (and integer output ofc too)
                 # modulo or remainder question unanswered
-                case "%": 
-                    assert_int(left, "left datatype must be an int for mod-ding")
-                    assert_int(right, "right datatype must be an int for mod-ding")
-                    return INT
-                
-                case "~": 
-                    assert_text(left, "left datatype must be str or char")
-                    assert_text(right, "right datatype must be str or char")
-                    return STR # no matter if it's char ~ char, it's going to be str regardless
 
 # will modify statements (aka, the ast) in-place
 def analyze_statementS(statementS) -> None: 
@@ -331,7 +271,7 @@ def analyze_statement(statement) -> None:
             # of an if block you can only do inside an if block (e.g. while loops have break and continue
             # ; and functions have return statements)
             condition = statement["condition"]
-            assert_bool(condition, "conditions (in an if) must be a boolean (what'd you expect)")
+            assert expression_type(condition) == BOOL
 
             block = statement["block"]
             push_scope(block)
@@ -343,7 +283,7 @@ def analyze_statement(statement) -> None:
             # of an if block you can only do inside an if block (e.g. while loops have break and continue
             # ; and functions have return statements)
             condition = statement["condition"]
-            assert_bool(condition, "conditions (in an if-else) must be a boolean (what'd you expect)")\
+            assert expression_type(condition) == BOOL
 
             then_block = statement["then-block"]
             else_block = statement["else-block"]
@@ -358,7 +298,7 @@ def analyze_statement(statement) -> None:
 
         case "while":
             condition = statement["condition"]
-            assert_bool(condition, "conditions (in a while loop) must be a boolean (what'd you expect)")
+            assert expression_type(condition) == BOOL
             
             block = statement["block"]
             push_scope(block)
@@ -369,7 +309,7 @@ def analyze_statement(statement) -> None:
             pop_scope()
         case "return":
             # no void functions :sad:
-            if not is_inside_function(): error("return EXPRESSION statements can only be used inside functions!") # though i dont know what I am currently in
+            assert is_inside_function(), "return EXPRESSION statements can only be used inside functions!" # though i dont know what I am currently in
 
             return_value = statement["value"]
 
@@ -377,13 +317,15 @@ def analyze_statement(statement) -> None:
             le_function = current_function()
             fn_name = le_function["name"]
             expected_type = le_function["returns"]
+
+
             if expression_type(return_value) != expected_type: error(f"Cannot return the datatype '{return_value}' from function '{fn_name}', because it is supposed to return '{expected_type}'")
 
         case "continue":
-            if not is_loop: error("continue statements can only be used inside loops")
+            assert in_loop, "continue statements can only be used inside loops"
 
         case "break":
-            if not is_loop: error("break statements can only be used inside loops")
+            assert in_loop, "break statements can only be used inside loops"
             
         case "external_fn":
             # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
