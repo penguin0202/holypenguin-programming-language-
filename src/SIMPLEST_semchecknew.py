@@ -1,12 +1,14 @@
 from json_funcs import *
 from semcheckhelper import *
+import os
 
-INPUT_FILE = "test/parsed.txt"
-OUTPUT_FILE = "test/semantically-analyzed.txt"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_FILENAME = os.path.join(SCRIPT_DIR, "parsed.txt")
+OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "semantically-analyzed.txt")
 
 # tuples are used for hash-ability
 
-statements = read_from_json(INPUT_FILE)
+statements = read_from_json(INPUT_FILENAME)
 symbol_table = []
 
 def assert_numerical(thing, msg) -> str: 
@@ -69,32 +71,32 @@ in_loop = False
 
 def add_variable_symbol(name, datatype) -> None: 
     if not symbol_table: error("Cannot add symbol, no scope exists")
-    current_scope = symbol_table[-1]
-    if name in current_scope: error(f"Symbol ({name["kind"]}) with this name already exists in your current scope!")
-    current_scope[name] = {"kind": "variable", "datatype": datatype}
+    current_scope_symbols = symbol_table[-1]["symbols"]
+    if name in current_scope_symbols: error(f"Symbol ({name["kind"]}) with this name already exists in your current scope!")
+    current_scope_symbols[name] = {"kind": "variable", "datatype": datatype}
     # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
 
 def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
     if not symbol_table: error("Cannot add symbol, no scope exists")
-    current_scope = symbol_table[-1]
-    if name in current_scope: 
+    current_scope_symbols = symbol_table[-1]["symbols"]
+    if name in current_scope_symbols: 
         # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
-        assert_function(current_scope[name], "symbol already exists not as a function")
+        assert_function(current_scope_symbols[name], "symbol already exists not as a function")
 
         # generate, from all keys inside the "set" of the function, a list containing all existing param lists
-        existing_datatypes_S = current_scope[name]["set"].keys() # no conflicts, good job david *pats head*
+        existing_datatypes_S = current_scope_symbols[name]["set"].keys() # no conflicts, good job david *pats head*
         if param_datatypes in existing_datatypes_S: error("duplicate function signature, where datatypes coincide")
 
         # if code executes here, it means both of the following
         # 1. param_datatypes is not in existing_datatypes_S, that means we can append it!
         # 2. past you (one who called this function) guranteed that names don't coincide
         # btw, the checking of the return types is handled by the function context
-        current_scope[name]["set"][tuple(param_datatypes)] = {
+        current_scope_symbols[name]["set"][tuple(param_datatypes)] = {
             "names": param_names, 
             "returns": returns
         }
     else: # if no function set already exists, create new one!
-        current_scope[name] = {
+        current_scope_symbols[name] = {
             "kind": "function",
             "set": {
                 tuple(param_datatypes): {
@@ -106,12 +108,12 @@ def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # 
 
 def symbol_exists(name) -> bool: 
     for scope in reversed(symbol_table): 
-        if name in scope: return True
+        if name in scope["symbols"]: return True
     return False
 
 def lookup_symbol(name) -> dict: 
     for scope in reversed(symbol_table): 
-        if name in scope: return scope[name]
+        if name in scope["symbols"]: return scope[name]
     error("symbol does not exist anywhere")
 
 def push_scope(node=None) -> None: 
@@ -177,12 +179,14 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
             operand = expression["operand"]
             assert_bool(operand, "not unary oepration can only work on boolean values")
             return BOOL
+        
         case "unary_assignment":
             operator = expression["operator"]
             variable = lvalue_assert(expression["variable"])
             match operator:
                 case "!!": assert_bool(variable, "variable must be a boolean")
                 case "++" | "--": assert_numerical(variable, "variable must be int or float")
+
         case "binary_assignment": # "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "~=": 
             operator = expression["operator"]
             lvalue = lvalue_assert(expression["variable"])
@@ -278,6 +282,7 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
                     assert_text(right, "right datatype must be str or char")
                     return STR # no matter if it's char ~ char, it's going to be str regardless
 
+# will modify statements (aka, the ast) in-place
 def analyze_statementS(statementS) -> None: 
     for statement in statementS:
         analyze_statement(statement)
@@ -287,7 +292,7 @@ def analyze_statement(statement) -> None:
         case "module": 
             block = statement["block"]
             push_scope(block)
-            analyze_statementS(block)
+            analyze_statementS(block["block"])
             pop_scope()
         case "var_decl":
             name = statement["name"]
@@ -296,10 +301,10 @@ def analyze_statement(statement) -> None:
         case "block":
             block = statement["block"]
             push_scope(block)
-            analyze_statementS(block)
+            analyze_statementS(block["block"])
             pop_scope()
         case "fn_decl":     
-                                                                  # duplicate names already checked here
+                                                                # duplicate names already checked here
             name, returns, parameter_datatypes, parameter_names = grab_fn_signature(statement)
             add_function_symbol(name, parameter_datatypes, parameter_names, returns)
 
@@ -312,7 +317,7 @@ def analyze_statement(statement) -> None:
             for param_name, param_datatype in zip(parameter_names, parameter_datatypes): 
                 add_variable_symbol(param_name, param_datatype)
 
-            analyze_statementS(block)
+            analyze_statementS(block["block"])
             # add parameters into that scope -> make them appear initialized
             # elaborating on my previous comment, after i have all done you know, scope issues, i will move on to - 
             # solving uninitialized issues, where every variable (and function if i allow undefined functions that has a signature) - 
@@ -330,7 +335,7 @@ def analyze_statement(statement) -> None:
 
             block = statement["block"]
             push_scope(block)
-            analyze_statementS(block)
+            analyze_statementS(block["block"])
             pop_scope()
         case "if_else":
             # hello, past you here, no need to have a context/stack/a single global (bit) flag
@@ -344,11 +349,11 @@ def analyze_statement(statement) -> None:
             else_block = statement["else-block"]
             
             push_scope(then_block) # the if part starts
-            analyze_statementS(then_block)
+            analyze_statementS(then_block["block"])
             pop_scope() # the if part ends
 
             push_scope(else_block) # the else part starts
-            analyze_statementS(else_block)
+            analyze_statementS(else_block["block"])
             pop_scope() # the else part ends
 
         case "while":
@@ -359,7 +364,7 @@ def analyze_statement(statement) -> None:
             push_scope(block)
             global in_loop
             is_loop = True
-            analyze_statementS(block)
+            analyze_statementS(block["block"])
             is_loop = False
             pop_scope()
         case "return":
@@ -391,3 +396,7 @@ def analyze_statement(statement) -> None:
             expression_type(expression) # i dont need the type, i just need it to check validity
 
 analyze_statementS(statements)
+
+print(statements)
+
+write_to_json(OUTPUT_FILENAME, statements) # can't do this 

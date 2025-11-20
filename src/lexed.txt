@@ -1,0 +1,45 @@
+[
+    {
+        "type": "{"
+    },
+    {
+        "type": "keyword",
+        "value": "fn"
+    },
+    {
+        "type": "datatype",
+        "value": "int"
+    },
+    {
+        "type": "identifier",
+        "value": "x"
+    },
+    {
+        "type": "("
+    },
+    {
+        "type": ")"
+    },
+    {
+        "type": "{"
+    },
+    {
+        "type": "identifier",
+        "value": "y"
+    },
+    {
+        "type": "("
+    },
+    {
+        "type": ")"
+    },
+    {
+        "type": ";"
+    },
+    {
+        "type": "}"
+    },
+    {
+        "type": "}"
+    }
+]

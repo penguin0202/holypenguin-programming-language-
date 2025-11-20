@@ -1,16 +1,17 @@
 from helper import *
 from json_funcs import write_to_json
+import os
 
-INPUT_FILENAME = "test/test.txt"
-OUTPUT_FILENAME = "test/lexed.txt"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_FILENAME = os.path.join(SCRIPT_DIR, "test.txt")
+OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
 
 # I am not caring about tab size right now regarding position tracking
 
 def error(text) -> None: raise Exception(text)
 
 def isDigit(thing) -> bool: return thing in NUMBERS
-# includes underscore
-def isAlpha(thing) -> bool: return thing in ALLOWED_IN_NAMING
+def isAlpha(thing) -> bool: return thing in ALLOWED_IN_NAMING # includes underscore
 
 code = []
 with open(INPUT_FILENAME, "r") as file:
@@ -63,10 +64,6 @@ while not EOF():
             elif match("="): 
                 consume()
                 push("/=")
-            # integer division
-            # elif match("%"):
-            #     consume()
-            #     push("/%")
             else: push("/")
         
         case "%": 

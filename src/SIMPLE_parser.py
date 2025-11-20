@@ -1,7 +1,9 @@
 from json_funcs import *
+import os
 
-INPUT_FILENAME = "test/lexed.txt"
-OUTPUT_FILENAME = "test/parsed.txt"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+INPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
+OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "parsed.txt")
 
 '''# there is not variable_initialization function because that would require context
 
@@ -73,7 +75,9 @@ def peek_is_fn(): return match("keyword") and get_value(peek()) == "fn"
 tokens = read_from_json(INPUT_FILENAME)
 ast = {
     "type": "module", 
-    "code": []
+    "block": {
+        "block": []
+    }
 }
 
 def consume_name():
@@ -171,7 +175,7 @@ def parse_fn() -> dict:
     RequireStartingBrace()
     # function overloading, a name of a function will be a set with keys of an array of its parameters 
     # and the value of another table containing the code and the return type
-    return {'type': 'fn_decl', "returns": datatype, 'name': name, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": parse_block()}
+    return {'type': 'fn_decl', "returns": datatype, 'name': name, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": {"block": parse_block()}}
 
 def parse_function_parameters() -> list: 
     parameter_datatypes = []
@@ -200,7 +204,7 @@ def parse_statement() -> dict:
     token_type = get_type(token)
     if token_type == "{": 
         consume() # {
-        return {"type": "block", "block": parse_block()}
+        return {"type": "block", "block": {"block": parse_block()}}
     if token_type == "datatype": 
         consume()
         datatype = token["value"] 
@@ -211,7 +215,7 @@ def parse_statement() -> dict:
     if token_type == "keyword": 
         consume()
         match get_value(token): 
-            case "fn": parse_fn()
+            case "fn": return parse_fn()
             case "extern": # right now this only works with functions, not any variables, plz add functionality
                 if not match("keyword") or get_value(peek()) != "fn": error("Expected type:datatype, value:fn")
                 consume() # datatype:fn
@@ -230,25 +234,25 @@ def parse_statement() -> dict:
             case "while": 
                 exp = parse_expression()
                 RequireStartingBrace()
-                return {'type': 'while', 'condition': exp, 'block': parse_block()}
+                return {'type': 'while', 'condition': exp, 'block': {"block": parse_block()}}
             case "if": 
                 exp = parse_expression()
                 RequireStartingBrace()
                 if_block = parse_block()
                 if not match("keyword") or get_value(peek()) != "else": 
-                    return {'type': 'if', 'condition': exp, 'block': if_block} # None/eof or its just not else
+                    return {'type': 'if', 'condition': exp, 'block': {"block": if_block}} # None/eof or its just not else
                 else: 
                     consume() # keyword:else
                     RequireStartingBrace()
-                    return {'type': 'if_else', 'condition': exp, 'then-block': if_block, 'else-block': parse_block()}
+                    return {'type': 'if_else', 'condition': exp, 'then-block': {"block": if_block}, 'else-block': {"block": parse_block()}}
             case _: error("keyword not keyword, dev error")
-
-    # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
-    expr = parse_expression(allow_assignment=True)
-    RequireSemicolon()
-    return {"type": "expr", "expression": expr}
+    else: 
+        # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
+        expr = parse_expression(allow_assignment=True)
+        RequireSemicolon()
+        return {"type": "expr", "expression": expr}
 
 while tokens: 
-    ast["code"].append(parse_statement())
+    ast["block"]["block"].append(parse_statement())
 
-write_to_json(OUTPUT_FILENAME, ast)
+write_to_json(OUTPUT_FILENAME, [ast])

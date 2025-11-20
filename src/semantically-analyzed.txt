@@ -1,0 +1,37 @@
+[
+    {
+        "type": "module",
+        "block": {
+            "block": [
+                {
+                    "type": "block",
+                    "block": {
+                        "block": [
+                            {
+                                "type": "fn_decl",
+                                "returns": "int",
+                                "name": "x",
+                                "param_names": [],
+                                "param_datatypes": [],
+                                "block": {
+                                    "block": [
+                                        {
+                                            "type": "expr",
+                                            "expression": {
+                                                "type": "fn_call",
+                                                "name": {
+                                                    "type": "identifier",
+                                                    "value": "y"
+                                                },
+                                                "args": []
+                                            }
+                                        }
+                                    ],
+                                    "symbol_table": {
+                                        "symbols": {},
+                                        "parent": {
+                                            "symbols": {
+                                                "x": {
+                                                    "kind": "function",
+                                                    "set": {
+                                                        
