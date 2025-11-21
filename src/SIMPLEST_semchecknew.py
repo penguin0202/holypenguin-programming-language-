@@ -11,6 +11,34 @@ OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "semantically-analyzed.txt")
 statements = read_from_json(INPUT_FILENAME)
 symbol_table = []    
 
+BOOL = "bool"
+STR = "str"
+FLOAT = "float"
+INT = "int"
+CHAR = "char"
+
+# this also checks for duplicate parameter names
+def grab_fn_signature(parsed_fn) -> tuple: 
+    #guard
+    type = parsed_fn["type"]
+    assert type in ["fn_decl", "external_function_declaration"], "expected a parsed function dictionary"
+    
+    name = parsed_fn["name"]
+    returns = parsed_fn["returns"]
+    parameter_datatypes = parsed_fn["param_datatypes"]
+    parameter_names = parsed_fn["param_names"]
+
+    # PARAM CHECK----------
+    seen_parameter_names = []
+
+    for name in parameter_names: 
+        # does not care about type of duplicate name
+        assert name not in seen_parameter_names, f"duplicate parameter '{name}'"
+        seen_parameter_names.append(name)
+    # PARAM CHECK DONE -------
+
+    return name, returns, parameter_datatypes, parameter_names
+
 # check if expression (not the datatype of it) is assignable
 # variables
 # array accesses (in the future)
@@ -27,7 +55,7 @@ def is_lvalue(expression):
     return False
 
 def is_variable():
-    return
+    raise Exception("Dev error, not implemented")
 
 # chatgpt recommends instead of just a marker, add function names (and my own thinking because of function overloading: and function parameters) - 
 # to identify what function is being returned
@@ -49,7 +77,7 @@ def is_in_loop(): return in_loop
 def add_variable_symbol(name, datatype) -> None: 
     assert symbol_table, "Cannot add symbol, no scope exists"
     current_scope_symbols = symbol_table[-1]["symbols"]
-    if name in current_scope_symbols: error(f"Symbol ({name["kind"]}) with this name already exists in your current scope!")
+    assert name not in current_scope_symbols, f"Symbol ({name["kind"]}) with this name already exists in your current scope!"
     current_scope_symbols[name] = {"kind": "variable", "datatype": datatype}
     # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
 
@@ -58,11 +86,12 @@ def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # 
     current_scope_symbols = symbol_table[-1]["symbols"]
     if name in current_scope_symbols: 
         # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
-        assert_function(current_scope_symbols[name], "symbol already exists not as a function")
+        func = current_scope_symbols[name]
+        assert func["kind"] == "function", "symbol already exists not as a function"
 
         # generate, from all keys inside the "set" of the function, a list containing all existing param lists
         existing_datatypes_S = current_scope_symbols[name]["set"].keys() # no conflicts, good job david *pats head*
-        if param_datatypes in existing_datatypes_S: error("duplicate function signature, where datatypes coincide")
+        assert param_datatypes not in existing_datatypes_S, "duplicate function signature, where datatypes coincide"
 
         # if code executes here, it means both of the following
         # 1. param_datatypes is not in existing_datatypes_S, that means we can append it!
@@ -91,7 +120,7 @@ def symbol_exists(name) -> bool:
 def lookup_symbol(name) -> dict: 
     for scope in reversed(symbol_table): 
         if name in scope["symbols"]: return scope[name]
-    error("symbol does not exist anywhere")
+    raise Exception("symbol does not exist anywhere")
 
 def push_scope(node=None) -> None: 
     # using python references (necessary evil)
@@ -329,7 +358,6 @@ def analyze_statement(statement) -> None:
             assert expression_type(return_value) == expected_type, f"Cannot return the datatype '{return_value}' from function '{fn_name}', because it is supposed to return '{expected_type}'"
 
         case "continue": assert is_in_loop(), "continue statements can only be used inside loops"
-
         case "break": assert is_in_loop(), "break statements can only be used inside loops"
             
         case "external_fn":

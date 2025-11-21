@@ -15,8 +15,6 @@ def var_del(name):
 def get_type(thing): return thing["type"]
 def get_value(thing): return thing["value"]
 
-def error(text): raise Exception(text)
-
 PRECEDENCE = {
     "=": 1,
 
@@ -81,11 +79,11 @@ ast = {
 }
 
 def consume_name():
-    if not match("identifier"): error("Expected type:identifier")
+    assert match("identifier"), "Expected type:identifier"
     return get_value(consume())
 
 def eat_thing(thing, err): 
-    if not match(thing): error(err)
+    assert match(thing), err
     consume()
 
 def peek(): return tokens[0] if tokens else None
@@ -94,7 +92,7 @@ def match(thing): return get_type(peek()) == thing # peeks, doesnt consume, matc
 
 def parse_expression(min_precedence=0, allow_assignment=False) -> dict: 
     def parse_atom() -> dict:
-        if not tokens: error("Expected value")
+        assert tokens, "Expected value"
         match get_type(token := consume()): 
             case "literal": return token
             case "identifier": return token
@@ -104,7 +102,7 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
                 expr = parse_expression()
                 RequireClosingParen()
                 return expr
-        error(f"Unexpected token: {token}")
+        raise Exception(f"Unexpected token: {token}")
 
     left = parse_atom()
 
@@ -118,7 +116,7 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
         match operator: 
             case "(": left = {"type": "fn_call", "name": left, "args": parse_function_arguments()}
             case "++" | "--" | "!!": 
-                if not allow_assignment: error("AssignmentInExpression")
+                assert allow_assignment, "AssignmentInExpression"
                 left = {
                     "type": "unary_assignment", 
                     "operator": operator, 
@@ -127,7 +125,7 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
                 RequireSemicolon()
                 return left # immediate return cuz there should theoretically be nothing after a "i++;"
             case "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "~=": 
-                if not allow_assignment: error("AssignmentInExpression")
+                assert allow_assignment, "AssignmentInExpression"
                 left = {
                     "type": "binary_assignment",
                     "operator": operator, 
@@ -163,7 +161,7 @@ def parse_block() -> list:
     while tokens: 
         if match("}"): break
         statements.append(parse_statement())
-        if not tokens: error("Expected } (eof)")
+        assert tokens, "Expected } (eof)"
     RequireClosingBrace()
     return statements
 
@@ -194,12 +192,12 @@ def parse_function_parameters() -> list:
 
 # excludes fn, too complicated
 def parse_datatype() -> str: 
-    if not match("datatype"): error("Expected type:datatype")
+    assert match("datatype"), "Expected type:datatype"
     datatype = get_value(consume())
     return datatype
 
 def parse_statement() -> dict: 
-    if not tokens: error("i dont know what to say except: eof")
+    assert tokens, "i dont know what to say except: eof"
     token = peek()
     token_type = get_type(token)
     if token_type == "{": 
@@ -217,7 +215,7 @@ def parse_statement() -> dict:
         match get_value(token): 
             case "fn": return parse_fn()
             case "extern": # right now this only works with functions, not any variables, plz add functionality
-                if not match("keyword") or get_value(peek()) != "fn": error("Expected type:datatype, value:fn")
+                assert match("keyword") and get_value(peek()) == "fn", "Expected type:datatype, value:fn"
                 consume() # datatype:fn
                 datatype = parse_datatype()
                 name = consume_name()
@@ -226,7 +224,7 @@ def parse_statement() -> dict:
                 return {"type": "external_fn", "name": name, "returns": datatype, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"]}
             case "break": return {"type": "break"}
             case "continue": return {"type": "continue"}
-            case "else": error("what is ts doing here dawg") # not a 'top-level' statement starter, only can use in conjunction of if in front
+            case "else": raise Exception("what is ts doing here dawg") # not a 'top-level' statement starter, only can use in conjunction of if in front
             case "return": 
                 exp = parse_expression()
                 RequireSemicolon()
@@ -245,7 +243,7 @@ def parse_statement() -> dict:
                     consume() # keyword:else
                     RequireStartingBrace()
                     return {'type': 'if_else', 'condition': exp, 'then-block': {"block": if_block}, 'else-block': {"block": parse_block()}}
-            case _: error("keyword not keyword, dev error")
+            case _: raise Exception("keyword not keyword, dev error")
     else: 
         # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
         expr = parse_expression(allow_assignment=True)
