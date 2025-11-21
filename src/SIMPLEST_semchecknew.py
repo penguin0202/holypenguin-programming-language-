@@ -9,21 +9,25 @@ OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "semantically-analyzed.txt")
 # tuples are used for hash-ability
 
 statements = read_from_json(INPUT_FILENAME)
-symbol_table = []
+symbol_table = []    
 
 # check if expression (not the datatype of it) is assignable
 # variables
 # array accesses (in the future)
 # member accesses (in the future)
 # function calls (if pointers are added, in the future)
-def lvalue_assert(expression, msg): 
+def is_lvalue(expression):
     type = expression["type"]
     # next is array access
     # then next is dereferencing (also a function that returns a pointer)
     # if its member access, check every name
     # if its identifier, check if its a function, and then check if its toplevel
-    if type != "identifier": error(msg)
-    return expression
+    if type == "identifier": 
+        return True
+    return False
+
+def is_variable():
+    return
 
 # chatgpt recommends instead of just a marker, add function names (and my own thinking because of function overloading: and function parameters) - 
 # to identify what function is being returned
@@ -33,21 +37,24 @@ function_context = [] # it is a stack instead of just a global bit flag because 
 def enter_function(name, param_datatypes, param_names, returns): function_context.append({"name": name, "parameter_datatypes": param_datatypes, "parameter_names": param_names, "returns": returns})
 def exit_function() -> None: function_context.pop(-1)
 def current_function() -> dict: return function_context[-1]
-def is_inside_function() -> bool: return len(function_context) > 0
+def is_in_function() -> bool: return len(function_context) > 0
 
 # did not make a loop_context because i dont think i need to store any metadata regarding the loop
 # other than that I am in one so i can validate breka and continue statements
 in_loop = False
+def enter_loop(): global in_loop; in_loop = True
+def exit_loop(): global in_loop; in_loop = False
+def is_in_loop(): return in_loop
 
 def add_variable_symbol(name, datatype) -> None: 
-    if not symbol_table: error("Cannot add symbol, no scope exists")
+    assert symbol_table, "Cannot add symbol, no scope exists"
     current_scope_symbols = symbol_table[-1]["symbols"]
     if name in current_scope_symbols: error(f"Symbol ({name["kind"]}) with this name already exists in your current scope!")
     current_scope_symbols[name] = {"kind": "variable", "datatype": datatype}
     # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
 
 def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
-    if not symbol_table: error("Cannot add symbol, no scope exists")
+    assert symbol_table, "Cannot add symbol, no scope exists"
     current_scope_symbols = symbol_table[-1]["symbols"]
     if name in current_scope_symbols: 
         # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
@@ -95,7 +102,7 @@ def push_scope(node=None) -> None:
     # symbol_table.append({})
 
 def pop_scope() -> None | dict: 
-    if not symbol_table: error("cannot pop scope if symbol table is empty")
+    assert symbol_table, "cannot pop scope if symbol table is empty"
     symbol_table.pop() # popped last item, aka last inserted item
     return # you can return the popped scope by putting the above here, but right now i have no sue of debugging yet (sue? i meant use)
 
@@ -137,32 +144,34 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
 
         case "identifier": 
             name = expression["value"]
-            if not symbol_exists(name): error("Variable undeclared")
-            variable = assert_variable(lookup_symbol(name), "unfortunately, the name you referenced is not a variable!")
+            assert symbol_exists(name), "Variable undeclared"
+            variable = lookup_symbol(name)
+            assert is_variable(variable), "name referenced is not a variable, most likely its a function"
             return variable["datatype"]
         
         case "negate_expr":
             operand = expression["operand"]
-            assert operand == INT
+            assert expression_type(operand) == INT
             return INT # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
         
         case "not_expr":
             operand = expression["operand"]
-            assert operand == BOOL
+            assert expression_type(operand) == BOOL
             return BOOL
         
         case "unary_assignment":
             operator = expression["operator"]
-            variable = lvalue_assert(expression["variable"])
+            variable = expression["variable"]
+            assert is_lvalue(variable), "must be lvalue"
             vt = expression_type(variable)
             match operator:
                 case "!!": assert vt == BOOL
                 case "++" | "--": assert vt == INT
 
-        case "binary_assignment": # "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "~=": 
+        case "binary_assignment": # "=" | "+=" | "-=" | "*=" | "/=" | "%=": 
             operator = expression["operator"]
-            lvalue = lvalue_assert(expression["variable"])
-            # from now on, lvalues are already checked for actual lvalue
+            lvalue = expression["variable"]
+            assert is_lvalue(lvalue), "must be lvalue" # from now on, lvalues are already checked for actual lvalue
             rvalue = expression["value"]
             lt = expression_type(lvalue)
             rt = expression_type(rvalue)
@@ -302,14 +311,13 @@ def analyze_statement(statement) -> None:
             
             block = statement["block"]
             push_scope(block)
-            global in_loop
-            is_loop = True
+            enter_loop()
             analyze_statementS(block["block"])
-            is_loop = False
+            exit_loop()
             pop_scope()
         case "return":
             # no void functions :sad:
-            assert is_inside_function(), "return EXPRESSION statements can only be used inside functions!" # though i dont know what I am currently in
+            assert is_in_function(), "return EXPRESSION statements can only be used inside functions!" # though i dont know what I am currently in
 
             return_value = statement["value"]
 
@@ -318,14 +326,11 @@ def analyze_statement(statement) -> None:
             fn_name = le_function["name"]
             expected_type = le_function["returns"]
 
+            assert expression_type(return_value) == expected_type, f"Cannot return the datatype '{return_value}' from function '{fn_name}', because it is supposed to return '{expected_type}'"
 
-            if expression_type(return_value) != expected_type: error(f"Cannot return the datatype '{return_value}' from function '{fn_name}', because it is supposed to return '{expected_type}'")
+        case "continue": assert is_in_loop(), "continue statements can only be used inside loops"
 
-        case "continue":
-            assert in_loop, "continue statements can only be used inside loops"
-
-        case "break":
-            assert in_loop, "break statements can only be used inside loops"
+        case "break": assert is_in_loop(), "break statements can only be used inside loops"
             
         case "external_fn":
             # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
@@ -338,7 +343,5 @@ def analyze_statement(statement) -> None:
             expression_type(expression) # i dont need the type, i just need it to check validity
 
 analyze_statementS(statements)
-
-print(statements)
 
 write_to_json(OUTPUT_FILENAME, statements) # can't do this 
