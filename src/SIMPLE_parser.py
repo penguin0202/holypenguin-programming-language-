@@ -74,7 +74,7 @@ tokens = read_from_json(INPUT_FILENAME)
 ast = {
     "type": "module", 
     "block": {
-        "block": []
+        "code": []
     }
 }
 
@@ -173,7 +173,7 @@ def parse_fn() -> dict:
     RequireStartingBrace()
     # function overloading, a name of a function will be a set with keys of an array of its parameters 
     # and the value of another table containing the code and the return type
-    return {'type': 'fn_decl', "returns": datatype, 'name': name, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": {"block": parse_block()}}
+    return {'type': 'fn_decl', "returns": datatype, 'name': name, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": {"code": parse_block(), "symbol_table": None}}
 
 def parse_function_parameters() -> list: 
     parameter_datatypes = []
@@ -202,7 +202,7 @@ def parse_statement() -> dict:
     token_type = get_type(token)
     if token_type == "{": 
         consume() # {
-        return {"type": "block", "block": {"block": parse_block()}}
+        return {"type": "block", "block": {"code": parse_block(), "symbol_table": None}}
     if token_type == "datatype": 
         consume()
         datatype = token["value"] 
@@ -232,17 +232,17 @@ def parse_statement() -> dict:
             case "while": 
                 exp = parse_expression()
                 RequireStartingBrace()
-                return {'type': 'while', 'condition': exp, 'block': {"block": parse_block()}}
+                return {'type': 'while', 'condition': exp, 'block': {"code": parse_block(), "symbol_table": None}}
             case "if": 
                 exp = parse_expression()
                 RequireStartingBrace()
                 if_block = parse_block()
                 if not match("keyword") or get_value(peek()) != "else": 
-                    return {'type': 'if', 'condition': exp, 'block': {"block": if_block}} # None/eof or its just not else
+                    return {'type': 'if', 'condition': exp, 'block': {"code": if_block, "symbol_table": None}} # None/eof or its just not else
                 else: 
                     consume() # keyword:else
                     RequireStartingBrace()
-                    return {'type': 'if_else', 'condition': exp, 'then-block': {"block": if_block}, 'else-block': {"block": parse_block()}}
+                    return {'type': 'if_else', 'condition': exp, 'then-block': {"code": if_block, "symbol_table": None}, 'else-block': {"code": parse_block(), "symbol_table": None}}
             case _: raise Exception("keyword not keyword, dev error")
     else: 
         # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
@@ -251,6 +251,6 @@ def parse_statement() -> dict:
         return {"type": "expr", "expression": expr}
 
 while tokens: 
-    ast["block"]["block"].append(parse_statement())
+    ast["block"]["code"].append(parse_statement())
 
 write_to_json(OUTPUT_FILENAME, [ast])

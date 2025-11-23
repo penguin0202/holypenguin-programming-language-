@@ -1,6 +1,6 @@
 from json_funcs import *
-from semcheckhelper import *
 import os
+import pprint
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = os.path.join(SCRIPT_DIR, "parsed.txt")
@@ -9,7 +9,7 @@ OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "semantically-analyzed.txt")
 # tuples are used for hash-ability
 
 statements = read_from_json(INPUT_FILENAME)
-symbol_table = []    
+symbol_table = []
 
 BOOL = "bool"
 STR = "str"
@@ -90,26 +90,31 @@ def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # 
         assert func["kind"] == "function", "symbol already exists not as a function"
 
         # generate, from all keys inside the "set" of the function, a list containing all existing param lists
-        existing_datatypes_S = current_scope_symbols[name]["set"].keys() # no conflicts, good job david *pats head*
+        # no conflicts, good job david *pats head*
+
+        existing_datatypes_S = []
+        for i_dont_know_what_to_name_this in current_scope_symbols[name]["set"]: 
+            existing_datatypes_S.append(i_dont_know_what_to_name_this["datatypes"])
+
         assert param_datatypes not in existing_datatypes_S, "duplicate function signature, where datatypes coincide"
 
         # if code executes here, it means both of the following
         # 1. param_datatypes is not in existing_datatypes_S, that means we can append it!
         # 2. past you (one who called this function) guranteed that names don't coincide
         # btw, the checking of the return types is handled by the function context
-        current_scope_symbols[name]["set"][tuple(param_datatypes)] = {
+        current_scope_symbols[name]["set"].append({
+            "datatypes": param_datatypes,
             "names": param_names, 
             "returns": returns
-        }
+        })
     else: # if no function set already exists, create new one!
         current_scope_symbols[name] = {
             "kind": "function",
-            "set": {
-                tuple(param_datatypes): {
+            "set": [{
+                    "datatypes": param_datatypes,
                     "names": param_names, 
                     "returns": returns # btw, return values can be different across the sets (duh)
-                }
-            }
+            }]
         }
 
 def symbol_exists(name) -> bool: 
@@ -122,13 +127,12 @@ def lookup_symbol(name) -> dict:
         if name in scope["symbols"]: return scope[name]
     raise Exception("symbol does not exist anywhere")
 
-def push_scope(node=None) -> None: 
+def push_scope(node) -> None: 
     # using python references (necessary evil)
     parent = symbol_table[-1] if symbol_table else None
     singular_symbol_table = {"symbols" : {}, "parent": parent}
-    if node is not None: node["symbol_table"] = singular_symbol_table
+    node["symbol_table"] = singular_symbol_table
     symbol_table.append(singular_symbol_table)
-    # symbol_table.append({})
 
 def pop_scope() -> None | dict: 
     assert symbol_table, "cannot pop scope if symbol table is empty"
@@ -267,20 +271,24 @@ def analyze_statementS(statementS) -> None:
 
 def analyze_statement(statement) -> None: 
     match statement["type"]:
+        
         case "module": 
             block = statement["block"]
             push_scope(block)
-            analyze_statementS(block["block"])
+            analyze_statementS(block["code"])
             pop_scope()
+
         case "var_decl":
             name = statement["name"]
             datatype = statement["datatype"]
             add_variable_symbol(name, datatype)
+
         case "block":
             block = statement["block"]
             push_scope(block)
-            analyze_statementS(block["block"])
+            analyze_statementS(block["code"])
             pop_scope()
+
         case "fn_decl":     
                                                                 # duplicate names already checked here
             name, returns, parameter_datatypes, parameter_names = grab_fn_signature(statement)
@@ -295,7 +303,7 @@ def analyze_statement(statement) -> None:
             for param_name, param_datatype in zip(parameter_names, parameter_datatypes): 
                 add_variable_symbol(param_name, param_datatype)
 
-            analyze_statementS(block["block"])
+            analyze_statementS(block["code"])
             # add parameters into that scope -> make them appear initialized
             # elaborating on my previous comment, after i have all done you know, scope issues, i will move on to - 
             # solving uninitialized issues, where every variable (and function if i allow undefined functions that has a signature) - 
@@ -303,6 +311,7 @@ def analyze_statement(statement) -> None:
             # In the case of parameters, the flag will be set to true because it techinically will be *actually initilized* when it's used
             exit_function()
             pop_scope()
+
         case "if":
             # no need to have a context/stack/a single global (bit) flag for a selection statement
             # because there isnt anything you cant do outside
@@ -313,8 +322,9 @@ def analyze_statement(statement) -> None:
 
             block = statement["block"]
             push_scope(block)
-            analyze_statementS(block["block"])
+            analyze_statementS(block["code"])
             pop_scope()
+
         case "if_else":
             # hello, past you here, no need to have a context/stack/a single global (bit) flag
             # because there isnt anything you cant do outside
@@ -327,11 +337,11 @@ def analyze_statement(statement) -> None:
             else_block = statement["else-block"]
             
             push_scope(then_block) # the if part starts
-            analyze_statementS(then_block["block"])
+            analyze_statementS(then_block["code"])
             pop_scope() # the if part ends
 
             push_scope(else_block) # the else part starts
-            analyze_statementS(else_block["block"])
+            analyze_statementS(else_block["code"])
             pop_scope() # the else part ends
 
         case "while":
@@ -341,9 +351,10 @@ def analyze_statement(statement) -> None:
             block = statement["block"]
             push_scope(block)
             enter_loop()
-            analyze_statementS(block["block"])
+            analyze_statementS(block["code"])
             exit_loop()
             pop_scope()
+
         case "return":
             # no void functions :sad:
             assert is_in_function(), "return EXPRESSION statements can only be used inside functions!" # though i dont know what I am currently in

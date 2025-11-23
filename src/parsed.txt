@@ -2,34 +2,28 @@
     {
         "type": "module",
         "block": {
-            "block": [
+            "code": [
                 {
-                    "type": "block",
+                    "type": "fn_decl",
+                    "returns": "int",
+                    "name": "x",
+                    "param_names": [],
+                    "param_datatypes": [],
                     "block": {
-                        "block": [
+                        "code": [
                             {
-                                "type": "fn_decl",
-                                "returns": "int",
-                                "name": "x",
-                                "param_names": [],
-                                "param_datatypes": [],
-                                "block": {
-                                    "block": [
-                                        {
-                                            "type": "expr",
-                                            "expression": {
-                                                "type": "fn_call",
-                                                "name": {
-                                                    "type": "identifier",
-                                                    "value": "y"
-                                                },
-                                                "args": []
-                                            }
-                                        }
-                                    ]
+                                "type": "expr",
+                                "expression": {
+                                    "type": "fn_call",
+                                    "name": {
+                                        "type": "identifier",
+                                        "value": "y"
+                                    },
+                                    "args": []
                                 }
                             }
-                        ]
+                        ],
+                        "symbol_table": null
                     }
                 }
             ]
