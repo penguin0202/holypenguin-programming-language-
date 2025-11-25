@@ -29,12 +29,13 @@
                                 "symbols": {
                                     "x": {
                                         "kind": "function",
-                                        "set": {
-                                            "()": {
+                                        "set": [
+                                            {
+                                                "datatypes": [],
                                                 "names": [],
                                                 "returns": "int"
                                             }
-                                        }
+                                        ]
                                     }
                                 },
                                 "parent": null
@@ -47,12 +48,13 @@
                 "symbols": {
                     "x": {
                         "kind": "function",
-                        "set": {
-                            "()": {
+                        "set": [
+                            {
+                                "datatypes": [],
                                 "names": [],
                                 "returns": "int"
                             }
-                        }
+                        ]
                     }
                 },
                 "parent": null

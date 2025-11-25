@@ -1,6 +1,5 @@
 from json_funcs import *
 import os
-import pprint
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = os.path.join(SCRIPT_DIR, "parsed.txt")
@@ -9,13 +8,12 @@ OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "semantically-analyzed.txt")
 # tuples are used for hash-ability
 
 statements = read_from_json(INPUT_FILENAME)
-symbol_table = []
+symbol_table = {}
 
 BOOL = "bool"
-STR = "str"
-FLOAT = "float"
 INT = "int"
-CHAR = "char"
+
+next_scope_id = 0
 
 # this also checks for duplicate parameter names
 def grab_fn_signature(parsed_fn) -> tuple: 
@@ -44,7 +42,7 @@ def grab_fn_signature(parsed_fn) -> tuple:
 # array accesses (in the future)
 # member accesses (in the future)
 # function calls (if pointers are added, in the future)
-def is_lvalue(expression):
+def is_lvalue(expression) -> bool:
     type = expression["type"]
     # next is array access
     # then next is dereferencing (also a function that returns a pointer)
@@ -54,7 +52,7 @@ def is_lvalue(expression):
         return True
     return False
 
-def is_variable():
+def is_variable() -> bool:
     raise Exception("Dev error, not implemented")
 
 # chatgpt recommends instead of just a marker, add function names (and my own thinking because of function overloading: and function parameters) - 
@@ -62,7 +60,7 @@ def is_variable():
 # marker/function_context now looks like this: 
 # [ {"name": name, "params": params}, {"name": name, "params": params}, ...]
 function_context = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
-def enter_function(name, param_datatypes, param_names, returns): function_context.append({"name": name, "parameter_datatypes": param_datatypes, "parameter_names": param_names, "returns": returns})
+def enter_function(name, param_datatypes, param_names, returns) -> None: function_context.append({"name": name, "parameter_datatypes": param_datatypes, "parameter_names": param_names, "returns": returns})
 def exit_function() -> None: function_context.pop(-1)
 def current_function() -> dict: return function_context[-1]
 def is_in_function() -> bool: return len(function_context) > 0
@@ -70,30 +68,30 @@ def is_in_function() -> bool: return len(function_context) > 0
 # did not make a loop_context because i dont think i need to store any metadata regarding the loop
 # other than that I am in one so i can validate breka and continue statements
 in_loop = False
-def enter_loop(): global in_loop; in_loop = True
-def exit_loop(): global in_loop; in_loop = False
-def is_in_loop(): return in_loop
+def enter_loop() -> None: global in_loop; in_loop = True
+def exit_loop() -> None: global in_loop; in_loop = False
+def is_in_loop() -> bool: return in_loop
 
-def add_variable_symbol(name, datatype) -> None: 
+def add_variable_symbol(name, datatype, scope_id) -> None: 
     assert symbol_table, "Cannot add symbol, no scope exists"
-    current_scope_symbols = symbol_table[-1]["symbols"]
-    assert name not in current_scope_symbols, f"Symbol ({name["kind"]}) with this name already exists in your current scope!"
-    current_scope_symbols[name] = {"kind": "variable", "datatype": datatype}
+    the_scope_symbols = symbol_table[scope_id]["symbols"]
+    assert name not in the_scope_symbols, f"Symbol ({name["kind"]}) with this name already exists in your current scope!"
+    the_scope_symbols[name] = {"kind": "variable", "datatype": datatype}
     # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
 
-def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
+def add_function_symbol(name, param_datatypes, param_names, returns, scope_id) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
     assert symbol_table, "Cannot add symbol, no scope exists"
-    current_scope_symbols = symbol_table[-1]["symbols"]
-    if name in current_scope_symbols: 
+    the_scope_symbols = symbol_table[scope_id]["symbols"]
+    if name in the_scope_symbols: 
         # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
-        func = current_scope_symbols[name]
+        func = the_scope_symbols[name]
         assert func["kind"] == "function", "symbol already exists not as a function"
 
         # generate, from all keys inside the "set" of the function, a list containing all existing param lists
         # no conflicts, good job david *pats head*
 
         existing_datatypes_S = []
-        for i_dont_know_what_to_name_this in current_scope_symbols[name]["set"]: 
+        for i_dont_know_what_to_name_this in func["set"]: 
             existing_datatypes_S.append(i_dont_know_what_to_name_this["datatypes"])
 
         assert param_datatypes not in existing_datatypes_S, "duplicate function signature, where datatypes coincide"
@@ -102,13 +100,14 @@ def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # 
         # 1. param_datatypes is not in existing_datatypes_S, that means we can append it!
         # 2. past you (one who called this function) guranteed that names don't coincide
         # btw, the checking of the return types is handled by the function context
-        current_scope_symbols[name]["set"].append({
+        func["set"].append({
             "datatypes": param_datatypes,
             "names": param_names, 
             "returns": returns
         })
+
     else: # if no function set already exists, create new one!
-        current_scope_symbols[name] = {
+        the_scope_symbols[name] = {
             "kind": "function",
             "set": [{
                     "datatypes": param_datatypes,
@@ -118,21 +117,31 @@ def add_function_symbol(name, param_datatypes, param_names, returns) -> None: # 
         }
 
 def symbol_exists(name) -> bool: 
+    # build a reverse list of the symbol_table
     for scope in reversed(symbol_table): 
         if name in scope["symbols"]: return True
     return False
 
 def lookup_symbol(name) -> dict: 
-    for scope in reversed(symbol_table): 
+    for scope in symbol_table.values(): 
         if name in scope["symbols"]: return scope[name]
     raise Exception("symbol does not exist anywhere")
 
-def push_scope(node) -> None: 
-    # using python references (necessary evil)
-    parent = symbol_table[-1] if symbol_table else None
-    singular_symbol_table = {"symbols" : {}, "parent": parent}
-    node["symbol_table"] = singular_symbol_table
-    symbol_table.append(singular_symbol_table)
+def push_scope(parent_id=-1) -> None: 
+    global next_scope_id, symbol_table
+    scope_id = next_scope_id
+    next_scope_id += 1
+
+    # if parent_id is guard value, then parent_id will be the last, or rather, the biggest id, which will be the last-put-on-the-stack
+    if parent_id == -1:
+        parent_id = next_scope_id - 1 # global scope will have a parent of -1 if i dont pass None
+
+    symbol_table[scope_id] = {
+        "symbols" : {},
+        "parent": parent_id,
+    }
+
+    return scope_id
 
 def pop_scope() -> None | dict: 
     assert symbol_table, "cannot pop scope if symbol table is empty"
@@ -381,6 +390,9 @@ def analyze_statement(statement) -> None:
             expression = statement["expression"]
             expression_type(expression) # i dont need the type, i just need it to check validity
 
+
+
+push_scope(None)
 analyze_statementS(statements)
 
 write_to_json(OUTPUT_FILENAME, statements) # can't do this 
