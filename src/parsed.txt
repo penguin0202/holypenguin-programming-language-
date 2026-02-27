@@ -25,6 +25,42 @@
                         ],
                         "symbol_table": null
                     }
+                },
+                {
+                    "type": "if",
+                    "condition": {
+                        "type": "binary_expr",
+                        "operator": "==",
+                        "left": {
+                            "type": "identifier",
+                            "value": "x"
+                        },
+                        "right": {
+                            "type": "literal",
+                            "datatype": "int",
+                            "value": "5"
+                        }
+                    },
+                    "block": {
+                        "code": [],
+                        "symbol_table": null
+                    }
+                },
+                {
+                    "type": "expr",
+                    "expression": {
+                        "type": "binary_assignment",
+                        "operator": "=",
+                        "variable": {
+                            "type": "identifier",
+                            "value": "x"
+                        },
+                        "value": {
+                            "type": "literal",
+                            "datatype": "int",
+                            "value": "5"
+                        }
+                    }
                 }
             ]
         }

@@ -35,5 +35,48 @@
     },
     {
         "type": "}"
+    },
+    {
+        "type": "keyword",
+        "value": "if"
+    },
+    {
+        "type": "("
+    },
+    {
+        "type": "identifier",
+        "value": "x"
+    },
+    {
+        "type": "=="
+    },
+    {
+        "type": "literal",
+        "datatype": "int",
+        "value": "5"
+    },
+    {
+        "type": ")"
+    },
+    {
+        "type": "{"
+    },
+    {
+        "type": "}"
+    },
+    {
+        "type": "identifier",
+        "value": "x"
+    },
+    {
+        "type": "="
+    },
+    {
+        "type": "literal",
+        "datatype": "int",
+        "value": "5"
+    },
+    {
+        "type": ";"
     }
 ]

@@ -185,7 +185,7 @@ while not EOF():
                     char = peek()
                     if  not isDigit(char): break # None because eof or some other character
                     number += consume()
-                push_complicated(Literal("int"))
+                push_complicated(Literal("int", number))
             elif isAlpha(char): # name = keyword+identifier
                 # identifiers (variables, functions), keywords, literal:bools
                 name = char
