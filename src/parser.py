@@ -68,7 +68,7 @@ def RequireClosingParen(): eat_thing(")", "Expected type:)")
 def RequireStartingBracket(): eat_thing("[", "Expected type:[")
 def RequireClosingBracket(): eat_thing("]", "Expected type:]")
 
-def peek_is_fn(): return match("keyword") and get_value(peek()) == "fn"
+def peek_is_fn(): return match_type("keyword") and get_value(peek()) == "fn"
 
 tokens = read_from_json(INPUT_FILENAME)
 ast = {
@@ -79,12 +79,12 @@ ast = {
 }
 
 def consume_name():
-    assert match("identifier"), "Expected type:identifier"
+    assert match_type("identifier"), "Expected type:identifier"
     return get_value(advance())
 
-def eat_thing(thing, err): 
-    assert match(thing), err
-    advance()
+"""def eat_thing(thing, err): 
+    assert match_type(thing), err
+    advance()"""
 
 i = 0
 def peek() -> dict | None: return tokens[i] if tokens else None
@@ -93,7 +93,20 @@ def advance() -> dict | None:
     global i
     i+=1
     return token
-def match(thing): return get_type(peek()) == thing # peeks, doesnt consume, matches its type to the given thing
+def advance(type) -> dict | None:
+    token = peek()
+    assert token["type"] == type, "Expected type: " + type
+    global i
+    i+=1
+    return token
+def advance(type, value) -> dict | None:
+    token = peek()
+    assert token["type"] == type, "Expected type: " + type
+    assert token["value"] == value, "Expected value: " + value
+    global i
+    i+=1
+    return token
+def match_type(thing): return get_type(peek()) == thing # peeks, doesnt consume, matches its type to the given thing
 
 def parse_expression(min_precedence=0, allow_assignment=False) -> dict: 
     def parse_atom() -> dict:
@@ -101,22 +114,26 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
         match get_type(token := advance()): 
             case "literal": return token
             case "identifier": return token
-            case "-": return {"type": "negate_expr", "operand": parse_atom()}
-            case "!": return {"type": "not_expr", "operand": parse_atom()}
-            case "(": 
-                expr = parse_expression()
-                RequireClosingParen()
-                return expr
+            case "other": 
+                match get_value(token): 
+                    case "-": return {"type": "negate_expr", "operand": parse_atom()}
+                    case "!": return {"type": "not_expr", "operand": parse_atom()}
+                    case "(": 
+                        expr = parse_expression()
+                        RequireClosingParen()
+                        return expr
         raise Exception(f"Unexpected token: {token}")
 
     left = parse_atom()
 
     while tokens: 
-        operator = get_type(peek())
+        operator_token = peek()
+        if get_type(operator_token) != "other": break # must be an operator or some sort, not an identifier or whatnot
+        operator = get_value(operator_token)
         if operator not in PRECEDENCE.keys(): break
         precedence = PRECEDENCE.get(operator, -1)
         if precedence < min_precedence: break
-        advance() # the operator
+        advance() # consume the operator
 
         match operator: 
             case "(": left = {"type": "fn_call", "name": left, "args": parse_function_arguments()}
@@ -154,9 +171,9 @@ def parse_function_arguments() -> list:
     # make it so that once a named parameter is, well, named, all consecutive parameter assignation must also be named
     # look at you using fancy words
     while tokens: 
-        if match(")"): break
+        if match_type(")"): break
         arguments.append(parse_expression())
-        if match(")"): break
+        if match_type(")"): break
         RequireComma()
     RequireClosingParen()
     return arguments
@@ -164,7 +181,7 @@ def parse_function_arguments() -> list:
 def parse_block() -> list: 
     statements = []
     while tokens: 
-        if match("}"): break
+        if match_type("}"): break
         statements.append(parse_statement())
         assert tokens, "Expected } (eof)"
     RequireClosingBrace()
@@ -185,10 +202,10 @@ def parse_function_parameters() -> list:
     parameter_names = []
     parameters = {} # will hold { "datatypes": parameter_dsatatypes, "names": parameter_names }
     while tokens: 
-        if match(")"): break
+        if match_type(")"): break
         parameter_datatypes.append(parse_datatype())
         parameter_names.append(consume_name())
-        if match(")"): break
+        if match_type(")"): break
         RequireComma()
     RequireClosingParen()
     parameters["datatypes"] = parameter_datatypes
@@ -197,7 +214,7 @@ def parse_function_parameters() -> list:
 
 # excludes fn, too complicated
 def parse_datatype() -> str: 
-    assert match("datatype"), "Expected type:datatype"
+    assert match_type("datatype"), "Expected type:datatype"
     datatype = get_value(advance())
     return datatype
 
@@ -220,7 +237,7 @@ def parse_statement() -> dict:
         match get_value(token): 
             case "fn": return parse_fn()
             case "extern": # right now this only works with functions, not any variables, plz add functionality
-                assert match("keyword") and get_value(peek()) == "fn", "Expected type:datatype, value:fn"
+                assert match_type("keyword") and get_value(peek()) == "fn", "Expected type:datatype, value:fn"
                 advance() # datatype:fn
                 datatype = parse_datatype()
                 name = consume_name()
@@ -242,7 +259,7 @@ def parse_statement() -> dict:
                 exp = parse_expression()
                 RequireStartingBrace()
                 if_block = parse_block()
-                if not match("keyword") or get_value(peek()) != "else": 
+                if not match_type("keyword") or get_value(peek()) != "else": 
                     return {'type': 'if', 'condition': exp, 'block': {"code": if_block, "symbol_table": None}} # None/eof or its just not else
                 else: 
                     advance() # keyword:else
