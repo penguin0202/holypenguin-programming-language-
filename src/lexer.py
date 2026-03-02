@@ -17,126 +17,132 @@ with open(INPUT_FILENAME, "r") as file:
 if code == []: raise Exception("FileEmptySoTokenEmpty")
 tokens = []
 
-def EOF() -> bool: return len(code) == 0
-def consume() -> dict: return None if EOF() else code.pop(0)
-def peek() -> dict: return None if EOF() else code[0]
-def push(token) -> None: tokens.append({"type": token})
-def push_complicated(token) -> None: tokens.append(token)
-def peek_is(token) -> bool: return peek() == token
+i = 0
 
-while not EOF(): 
-    match char := consume(): 
+def EOF() -> bool: return i >= len(code)
+def peek() -> str: return None if EOF() else code[i]
+def advance() -> str: 
+    char = peek()
+    global i
+    i+=1
+    return char
+def bare(token) -> dict: return {"type": token}
+
+def next_token(): 
+    match char := advance(): 
         case "+":
-            if peek_is("+"): 
-                consume()
-                push("++")
-            elif peek_is("="): 
-                consume()
-                push("+=")
-            else: push("+") # None because eof, or next char is not compatable
+            if peek() == "+": 
+                advance()
+                return bare("++")
+            elif peek() == "=": 
+                advance()
+                return bare("+=")
+            return bare("+") # None because eof, or next char is not compatable
         
         case "-":
-            if peek_is("-"): 
-                consume()
-                push("--")
-            elif peek_is("="): 
-                consume()
-                push("-=")
-            else: push("-")
+            if peek() == "-": 
+                advance()
+                return bare("--")
+            elif peek() == "=": 
+                advance()
+                return bare("-=")
+            return bare("-")
         
         case "*": 
-            if peek_is("="): 
-                consume()
-                push("*=")
-            else: push("*")
+            if peek() == "=": 
+                advance()
+                return bare("*=")
+            return bare("*")
             
         case "/": 
-            if peek_is("/"): 
-                consume()                       
-                while peek() not in ["\n", None]: consume()
-            elif peek_is("*"): 
-                consume()
+            if peek() == "/": 
+                advance()                     
+                while peek() not in ["\n", None]: advance()
+            elif peek() == "*": 
+                advance()
                 while True: 
                     assert not EOF(), "started to do a multi-line comment, but ended because eof"
-                    if consume() == "*" and consume() == "/": break
-            elif peek_is("="): 
-                consume()
-                push("/=")
-            else: push("/")
+                    if advance() == "*" and advance() == "/": break
+                    # can eat everything in its path because it must end in those two characters
+                    #, and we don't care about what the comment actually says
+            elif peek() == "=": 
+                advance()
+                return bare("/=")
+            return bare("/")
         
         case "%": 
-            if peek_is("="): 
-                consume()
-                push("%=")
-            else: push("%")
+            if peek() == "=": 
+                advance()
+                return bare("%=")
+            return bare("%")
 
         case "<": 
-            if peek_is("="): 
-                consume()
-                push("<=")
-            else: push("<")
+            if peek() == "=": 
+                advance()
+                return bare("<=")
+            return bare("<")
         
         case ">": 
-            if peek_is("="): 
-                consume()
-                push(">=")
-            else: push(">")
+            if peek() == "=": 
+                advance()
+                return bare(">=")
+            return bare(">")
 
         case "&": 
-            if peek_is("?"): 
-                consume()
-                push("&?")
-            else: push("&")
+            if peek() == "?": 
+                advance()
+                return bare("&?")
+            return bare("&")
 
-        case "?": push("?")
+        case "?": return bare("?")
 
         case "!": 
-            if peek_is("!"): 
-                consume()
-                push("!!")
-            elif peek_is("="): 
-                consume()
-                push("!=")
-            else: push("!")
+            if peek() == "!": 
+                advance()
+                return bare("!!")
+            elif peek() == "=": 
+                advance()
+                return bare("!=")
+            return bare("!")
 
         case "~": 
-            if peek_is("="): 
-                consume()
-                push("~=")
-            else: push("~")
+            if peek() == "=": 
+                advance()
+                return bare("~=")
+            return bare("~")
 
         case "=": 
-            if peek_is("="): 
-                consume()
-                push("==")
-            else: push("=")
+            if peek() == "=": 
+                advance()
+                return bare("==")
+            return bare("=")
 
-        case ";": push(";")
-        case ",": push(",")
+        case ";": return bare(";")
+        case ",": return bare(",")
 
         # paren has expression grouper and function caller and function arger and possibly arrayer
         # expression grouper, function args grouper(func call too), possibly array
-        case "(": push("(")
-        case ")": push(")")
+        case "(": return bare("(")
+        case ")": return bare(")")
         # squares have list-maker (accessor is using :, not [])
         # also int[64], 
-        case "[": push("[")
-        case "]": push("]")
+        case "[": return bare("[")
+        case "]": return bare("]")
         # blockers: function, while, if-else, dictionary, struct
         # blocker -> creates blocks / block makers
-        case "{": push("{")
-        case "}": push("}")
+        case "{": return bare("{")
+        case "}": return bare("}")
 
         case ".": raise Exception("NotImplementedError(used to be member access, but i scraped that)")
 
-        case "\n" | "\t" | " ": pass
+        case "\n" | "\t" | " ": return next_token()
 
         case "\"": 
             string = ""
-            while (char := consume()) != "\"":
+            while (char := advance()) != "\"":
                 if char != "\\": string += char
                 else: 
-                    match char := consume(): 
+                    match char := advance(): 
                         case None: raise Exception("UnterminatedStringLiteral")
                         case "n": string += "\n"
                         case "t": string += "\t"
@@ -145,15 +151,15 @@ while not EOF():
                         case "\'": string += "\'"
                         # case "u" -> unicode: "\u2890"
                         case _: raise Exception("InvalidEscapeSequence")
-            push_complicated(Literal("str", string))
+            return Literal("str", string)
 
         case "\'": 
             character = ""
-            match char := consume(): 
+            match char := advance(): 
                 case None: raise Exception("UnterminatedCharLiteral")
                 case "\'": raise Exception("EmptyCharLiteral")
                 case "\\": 
-                    match char := consume():
+                    match char := advance():
                         case None: raise Exception("escape sequence started in a char, but eof (both escape sequence terminated, and char terminated because end ' not found)")
                         case "n": character += "\n"
                         case "t": character += "\t"
@@ -164,8 +170,8 @@ while not EOF():
                         case _: raise Exception("InvalidEscapeSequence")
                 case _: character += char
             assert not EOF(), "UnterminatedCharLiteral"
-            assert consume() == "\'", "CharTooLong"
-            push_complicated(Literal("char", character))
+            assert advance() == "\'", "CharTooLong"
+            return Literal("char", character)
         
         case "\\": raise Exception("Unexpected backslash outside of a string or char")
         case "#": raise Exception("NotImplementedError(dereference operator, but i dont want to deal with it right now)")
@@ -181,17 +187,19 @@ while not EOF():
                 number = char
                 while True:
                     char = peek()
-                    if  not isDigit(char): break # None because eof or some other character
-                    number += consume()
-                push_complicated(Literal("int", number))
+                    if not isDigit(char): break # None because eof or some other character
+                    number += advance()
+                return Literal("int", number)
             elif isAlpha(char): # name = keyword+identifier
                 # identifiers (variables, functions), keywords, literal:bools
                 name = char
-                while peek() in ALLOWED_IN_NAMING: name += consume()
-                if name in ["fn", "if", "else", "while", "return", "break", "continue", "extern"]: push_complicated(Keyword(name))
-                elif name in ["int", "bool"]: push_complicated(Datatype(name))
-                elif name in ["true", "false"]: push_complicated(Literal("bool", name))
-                else: push_complicated(Identifier(name))
-            else: raise Exception("IllegalCharError: " + repr(char))
+                while peek() in ALLOWED_IN_NAMING: name += advance()
+                if name in ["fn", "if", "else", "while", "return", "break", "continue", "extern"]: return Keyword(name)
+                elif name in ["int", "bool"]: return Datatype(name)
+                elif name in ["true", "false"]: return Literal("bool", name)
+                return Identifier(name)
+            raise Exception("IllegalCharError: " + repr(char))
 
+while not EOF(): 
+    tokens.append(next_token())
 write_to_json(OUTPUT_FILENAME, tokens)
