@@ -1,4 +1,3 @@
-from helper import *
 from json_funcs import write_to_json
 import os
 
@@ -7,9 +6,6 @@ INPUT_FILENAME = os.path.join(SCRIPT_DIR, "test.txt")
 OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
 
 # I am not caring about tab size right now regarding position tracking
-
-def isDigit(thing) -> bool: return thing in NUMBERS
-def isAlpha(thing) -> bool: return thing in ALLOWED_IN_NAMING # includes underscore AND NUMBERS? WHAT THE HELL WERE YOU THINKING
 
 code = []
 with open(INPUT_FILENAME, "r") as file:
@@ -20,15 +16,15 @@ tokens = []
 i = 0
 
 def EOF() -> bool: return i >= len(code)
-def peek() -> str: return None if EOF() else code[i]
-def advance() -> str: 
+def peek() -> str | None: return None if EOF() else code[i]
+def advance() -> str | None: 
     char = peek()
     global i
     i+=1
     return char
 def bare(token) -> dict: return {"type": token}
 
-def next_token(): 
+def next_token() -> dict: 
     match char := advance(): 
         case "+":
             if peek() == "+": 
@@ -151,7 +147,7 @@ def next_token():
                         case "\'": string += "\'"
                         # case "u" -> unicode: "\u2890"
                         case _: raise Exception("InvalidEscapeSequence")
-            return Literal("str", string)
+            return {"type": "literal", "datatype": "str", "value": string}
 
         case "\'": 
             character = ""
@@ -171,7 +167,7 @@ def next_token():
                 case _: character += char
             assert not EOF(), "UnterminatedCharLiteral"
             assert advance() == "\'", "CharTooLong"
-            return Literal("char", character)
+            return {"type": "literal", "datatype": "char", "value": character}
         
         case "\\": raise Exception("Unexpected backslash outside of a string or char")
         case "#": raise Exception("NotImplementedError(dereference operator, but i dont want to deal with it right now)")
@@ -183,23 +179,24 @@ def next_token():
         case ":": raise Exception("NotImplementedError(i think this is going to be used in dictionaries, and in function named parameters)")
 
         case _: 
-            if isDigit(char): # i dont care about floats anymore
+            if char in "0123456789": # i dont care about floats anymore
                 number = char
                 while True:
                     char = peek()
-                    if not isDigit(char): break # None because eof or some other character
+                    if char not in "0123456789": break # None because eof or some other character
                     number += advance()
-                return Literal("int", number)
-            elif isAlpha(char): # name = keyword+identifier
+                return {"type": "literal", "datatype": "int", "value": number}
+            elif char in "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ": # name = keyword+identifier
                 # identifiers (variables, functions), keywords, literal:bools
                 name = char
-                while peek() in ALLOWED_IN_NAMING: name += advance()
-                if name in ["fn", "if", "else", "while", "return", "break", "continue", "extern"]: return Keyword(name)
-                elif name in ["int", "bool"]: return Datatype(name)
-                elif name in ["true", "false"]: return Literal("bool", name)
-                return Identifier(name)
+                while peek() in "0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ": name += advance()
+                if name in ["fn", "if", "else", "while", "return", "break", "continue", "extern"]: return {"type": "keyword", "value": name}
+                elif name in ["int", "bool"]: return {"type": "datatype", "value": name}
+                elif name in ["true", "false"]: return {"type": "literal", "datatype": "bool", "value": name}
+                return {"type": "identifier", "value": name}
             raise Exception("IllegalCharError: " + repr(char))
 
 while not EOF(): 
     tokens.append(next_token())
+
 write_to_json(OUTPUT_FILENAME, tokens)
