@@ -80,20 +80,25 @@ ast = {
 
 def consume_name():
     assert match("identifier"), "Expected type:identifier"
-    return get_value(consume())
+    return get_value(advance())
 
 def eat_thing(thing, err): 
     assert match(thing), err
-    consume()
+    advance()
 
-def peek(): return tokens[0] if tokens else None
-def consume(): return tokens.pop(0) if tokens else None
+i = 0
+def peek() -> dict | None: return tokens[i] if tokens else None
+def advance() -> dict | None: 
+    token = peek()
+    global i
+    i+=1
+    return token
 def match(thing): return get_type(peek()) == thing # peeks, doesnt consume, matches its type to the given thing
 
 def parse_expression(min_precedence=0, allow_assignment=False) -> dict: 
     def parse_atom() -> dict:
         assert tokens, "Expected value"
-        match get_type(token := consume()): 
+        match get_type(token := advance()): 
             case "literal": return token
             case "identifier": return token
             case "-": return {"type": "negate_expr", "operand": parse_atom()}
@@ -111,7 +116,7 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
         if operator not in PRECEDENCE.keys(): break
         precedence = PRECEDENCE.get(operator, -1)
         if precedence < min_precedence: break
-        consume() # the operator
+        advance() # the operator
 
         match operator: 
             case "(": left = {"type": "fn_call", "name": left, "args": parse_function_arguments()}
@@ -193,7 +198,7 @@ def parse_function_parameters() -> list:
 # excludes fn, too complicated
 def parse_datatype() -> str: 
     assert match("datatype"), "Expected type:datatype"
-    datatype = get_value(consume())
+    datatype = get_value(advance())
     return datatype
 
 def parse_statement() -> dict: 
@@ -201,22 +206,22 @@ def parse_statement() -> dict:
     token = peek()
     token_type = get_type(token)
     if token_type == "{": 
-        consume() # {
+        advance() # {
         return {"type": "block", "block": {"code": parse_block(), "symbol_table": None}}
     if token_type == "datatype": 
-        consume()
+        advance()
         datatype = token["value"] 
         name = consume_name()
         RequireSemicolon()
         return {"type": "var_decl", "name": name, "datatype": datatype}
         # no variable declaration an dinitialization in the same place
     if token_type == "keyword": 
-        consume()
+        advance()
         match get_value(token): 
             case "fn": return parse_fn()
             case "extern": # right now this only works with functions, not any variables, plz add functionality
                 assert match("keyword") and get_value(peek()) == "fn", "Expected type:datatype, value:fn"
-                consume() # datatype:fn
+                advance() # datatype:fn
                 datatype = parse_datatype()
                 name = consume_name()
                 RequireStartingParen()
@@ -240,7 +245,7 @@ def parse_statement() -> dict:
                 if not match("keyword") or get_value(peek()) != "else": 
                     return {'type': 'if', 'condition': exp, 'block': {"code": if_block, "symbol_table": None}} # None/eof or its just not else
                 else: 
-                    consume() # keyword:else
+                    advance() # keyword:else
                     RequireStartingBrace()
                     return {'type': 'if_else', 'condition': exp, 'then-block': {"code": if_block, "symbol_table": None}, 'else-block': {"code": parse_block(), "symbol_table": None}}
             case _: raise Exception("keyword not keyword, dev error")

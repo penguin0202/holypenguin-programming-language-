@@ -22,7 +22,7 @@ def advance() -> str | None:
     global i
     i+=1
     return char
-def bare(token) -> dict: return {"type": token}
+def bare(token) -> dict: return {"type": "other", "value": token}
 
 def next_token() -> dict: 
     match char := advance(): 
