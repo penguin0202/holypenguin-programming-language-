@@ -6,10 +6,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
 OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "parsed.txt")
 
-'''# there is not variable_initialization function because that would require context
+"""# there is not variable_initialization function because that would require context
 
 def var_del(name): 
-    return {"type": "var_del", "name": name}'''
+    return {"type": "var_del", "name": name}"""
 
 # if you worry about pointers at any point in time during the developmental phase of this project, i will slime you out taiwanigga
 
@@ -181,7 +181,7 @@ def parse_fn() -> dict:
     advance("other", "{")
     # function overloading, a name of a function will be a set with keys of an array of its parameters 
     # and the value of another table containing the code and the return type
-    return {'type': 'fn_decl', "returns": datatype, 'name': name, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": {"code": parse_block(), "symbol_table": None}}
+    return {"type": "fn_decl", "returns": datatype, "name": name, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": {"code": parse_block(), "symbol_table": None}}
 
 def parse_function_parameters() -> list: 
     parameter_datatypes = []
@@ -226,25 +226,25 @@ def parse_statement() -> dict:
                 return {"type": "external_fn", "name": name, "returns": datatype, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"]}
             case "break": return {"type": "break"}
             case "continue": return {"type": "continue"}
-            case "else": raise Exception("what is ts doing here dawg") # not a 'top-level' statement starter, only can use in conjunction of if in front
+            case "else": raise Exception("what is ts doing here dawg") # not a "top-level" statement starter, only can use in conjunction of if in front
             case "return": 
                 exp = parse_expression()
-                advance("other", ";")()
+                advance("other", ";")
                 return {"type": "return", "value": exp}
             case "while": 
                 exp = parse_expression()
                 advance("other", "{")
-                return {'type': 'while', 'condition': exp, 'block': {"code": parse_block(), "symbol_table": None}}
+                return {"type": "while", "condition": exp, "block": {"code": parse_block(), "symbol_table": None}}
             case "if": 
                 exp = parse_expression()
                 advance("other", "{")
                 if_block = parse_block()
                 if not peekis("keyword", "else"): 
-                    return {'type': 'if', 'condition': exp, 'block': {"code": if_block, "symbol_table": None}} # None/eof or its just not else
+                    return {"type": "if", "condition": exp, "block": {"code": if_block, "symbol_table": None}} # None/eof or its just not else
                 else: 
                     advance() # keyword:else
                     advance("other", "{")
-                    return {'type': 'if_else', 'condition': exp, 'then-block': {"code": if_block, "symbol_table": None}, 'else-block': {"code": parse_block(), "symbol_table": None}}
+                    return {"type": "if_else", "condition": exp, "then-block": {"code": if_block, "symbol_table": None}, "else-block": {"code": parse_block(), "symbol_table": None}}
             case _: raise Exception("keyword not keyword, dev error")
     else: 
         # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
