@@ -1,0 +1,10 @@
+class T_TYPES: 
+    INVALID = -1
+    OTHER = 0
+    KEYWORD = 1
+    IDENTIFIER = 2
+    DATATYPE = 3
+    LITERAL = 4
+    DELIMITER = 5
+    OPERATOR = 6
+    ASSIGNER = 7
