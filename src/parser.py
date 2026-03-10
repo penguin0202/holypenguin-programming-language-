@@ -78,30 +78,51 @@ class Statement():
         if key not in self._attributes: 
             raise Exception(key + " not in " + self.type + " statement")
         return self._attributes[key]
+    
+class Block(): 
+    def __init__(self): 
+        self._symbol_table = None
+        self._code: list[Statement] = []
+    def add(self, statement:Statement): 
+        self._code.append(statement)
+    @property
+    def symbol_table(self): 
+        return self._symbol_table
+    @property
+    def code(self): 
+        return self._code
 
 class Expression(): 
     def __init__(self, type) -> None: 
         self._type = type
 
-class IfStatement(Statement): 
-    # {"type": "if", "condition": exp, "block": {"code": if_block, "symbol_table": None}}
-    def __init__(self, condition_param, block_param): 
-        super().__init__("if", condition=condition_param, block=block_param)
+def WhileStatement(condition, block): return Statement("while", condition=condition, block=block)
+def IfStatement(condition, block): return Statement("if", condition=condition, block=block)
+def BlockStatement(block:Block): return Statement("block", block=block)
+def VarDeclStatement(name, datatype): return Statement("var_decl", name=name, datatype=datatype)
+def ReturnStatement(value): return Statement("return", value=value)
+def FnDeclStatement(fn_signature, block): return Statement("fn_decl", fn_signature=fn_signature, block=block)
+def ExternalFnStatement(fn_signature): return Statement("extern_fn", fn_signature=fn_signature)
+def BreakStatement(): return Statement("break")
+def ContinueStatement(): return Statement("continue")
+def IfElseStatement(condition, then_block, else_block): return Statement("if_else", condition=condition, then_block=then_block, else_block=else_block)
+def ExpressionStatement(expression): return Statement("expr", expression=expression)
 
-class FnDeclStatement(Statement): 
-    # {"type": "fn_decl", "returns": datatype.value, "name": name.value, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": {"code": parse_block(), "symbol_table": None}}
-    def __init__(self, returns_param, name_param, param_names_param, param_datatypes_param, block_param): 
-        super().__init__("fn_decl", returns=returns_param, name=name_param, param_names=param_names_param, param_datatypes=param_datatypes_param, block=block_param)
-
-class VarDeclStatement(Statement): 
-    # {"type": "var_decl", "name": name.value, T_TYPES.DATATYPE: token.value}
-    def __init__(self, name_param, datatype_param)
-        super().__init__("var_decl", name=name_param, datatype=datatype_param)
-
-
-
-class Block(): 
-
+class FnSignatureThing(): # {"type": "fn_decl", "returns": datatype.value, "name": name.value, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": {"code": parse_block(), "symbol_table": None}}
+    def __init__(self, name, returns, param_names, param_datatypes): 
+        self._name = name
+        self._returns = returns
+        self._param_names = param_names
+        self._param_datatypes = param_datatypes
+    
+    @property
+    def name(self): return self._name
+    @property
+    def returns(self): return self._returns
+    @property
+    def param_names(self): return self._param_names
+    @property
+    def param_datatypes(self): return self._param_datatypes
 
 class Tokens(): 
     def __init__(self) -> None: 
@@ -132,7 +153,7 @@ class Tokens():
         return token
     def __str__(self) -> str: 
         return ""
-
+    
 i = 0
 def peek() -> Token: return tokens[i] if tokens else Token.EOF()
 def peekis(type) -> bool: 
@@ -189,7 +210,17 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
         advance() # consume the operator
 
         match operator: 
-            case "(": left = {"type": "fn_call", "name": left, "args": parse_function_arguments()}
+            case "(": 
+                arguments = [] # no named arguments (at least now yet)
+                # make it so that once a named parameter is, well, named, all consecutive parameter assignation must also be named
+                # look at you using fancy words
+                while tokens: 
+                    if peekis(T_TYPES.DELIMITER, ")"): break
+                    arguments.append(parse_expression())
+                    if peekis(T_TYPES.DELIMITER, ")"): break
+                    advance(T_TYPES.DELIMITER, ",")
+                advance(T_TYPES.DELIMITER, ")")
+                left = {"type": "fn_call", "name": left, "args": arguments}
             case "++" | "--" | "!!": 
                 assert allow_assignment, "AssignmentInExpression"
                 left = {
@@ -218,42 +249,21 @@ def parse_expression(min_precedence=0, allow_assignment=False) -> dict:
 
     return left
 
-# no named arguments
-def parse_function_arguments() -> list: 
-    arguments = []
-    # make it so that once a named parameter is, well, named, all consecutive parameter assignation must also be named
-    # look at you using fancy words
-    while tokens: 
-        if peekis(T_TYPES.DELIMITER, ")"): break
-        arguments.append(parse_expression())
-        if peekis(T_TYPES.DELIMITER, ")"): break
-        advance(T_TYPES.DELIMITER, ",")
-    advance(T_TYPES.DELIMITER, ")")
-    return arguments
-
-def parse_block() -> list: 
-    statements = []
+def parse_block() -> Block: 
+    block: Block = Block()
     while tokens: 
         if peekis(T_TYPES.DELIMITER, "}"): break
-        statements.append(parse_statement())
+        block.add(parse_statement())
         assert tokens, "Expected } (eof)"
     advance(T_TYPES.DELIMITER, "}")
-    return statements
+    return block
 
-def parse_fn() -> dict: 
+def parse_fn_signature() -> FnSignatureThing: 
     datatype: Token = advance(T_TYPES.DATATYPE)
     name: Token = advance(T_TYPES.IDENTIFIER)
     advance(T_TYPES.DELIMITER, "(")
-    parameters = parse_function_parameters() # already requires closing paren inside
-    advance(T_TYPES.DELIMITER, "{")
-    # function overloading, a name of a function will be a set with keys of an array of its parameters 
-    # and the value of another table containing the code and the return type
-    return FnDeclStatement(datatype.value, name.value, parameters["names"], parameters["datatypes"], {"code": parse_block(), "symbol_table": None})
-
-def parse_function_parameters() -> list: 
     parameter_datatypes = []
     parameter_names = []
-    parameters = {} # will hold { "datatypes": parameter_dsatatypes, "names": parameter_names }
     while tokens: 
         if peekis(T_TYPES.DELIMITER, ")"): break
         datatype: Token = advance(T_TYPES.DATATYPE)
@@ -261,62 +271,60 @@ def parse_function_parameters() -> list:
         parameter_datatypes.append(datatype.value)
         parameter_names.append(name.value)
         if peekis(T_TYPES.DELIMITER, ")"): break
-        advance(T_TYPES.DELIMITER, ",")
+        advance(T_TYPES.DELIMITER, ",") # allows trailing commas for no particular reason
     advance(T_TYPES.DELIMITER, ")")
-    parameters["datatypes"] = parameter_datatypes
-    parameters["names"] = parameter_names
-    return parameters
+    # function overloading, a name of a function will be a set with keys of an array of its parameters 
+    # and the value of another table containing the code and the return type
+    return FnSignatureThing(name.value, datatype.value, parameter_names, parameter_datatypes)
 
-def parse_statement() -> dict: 
+def parse_statement() -> Statement: 
     token = peek()
     assert token != Token.EOF(), "eof, want statement"
     if token.type == T_TYPES.DELIMITER and token.value == "{": 
         advance() # {
-        return {"type": "block", "block": {"code": parse_block(), "symbol_table": None}}
+        return BlockStatement(parse_block())
     if token.type == T_TYPES.DATATYPE: 
         advance()
         name: Token = advance(T_TYPES.IDENTIFIER)
         advance(T_TYPES.DELIMITER, ";")
-        return {"type": "var_decl", "name": name.value, T_TYPES.DATATYPE: token.value}
-        # no variable declaration an dinitialization in the same place
+        return VarDeclStatement(name.value, token.value) # no variable declaration an dinitialization in the same place
     if token.type == T_TYPES.KEYWORD: 
         advance()
         match token.value: 
-            case "fn": return parse_fn()
+            case "fn": 
+                fn_signature: FnSignatureThing = parse_fn_signature()
+                advance(T_TYPES.DELIMITER, "{")
+                return FnDeclStatement(fn_signature, parse_block())
             case "extern": # right now this only works with functions, not any variables, plz add functionality
                 advance(T_TYPES.KEYWORD, "fn")
-                datatype: Token = advance(T_TYPES.DATATYPE)
-                name: Token = advance(T_TYPES.IDENTIFIER)
-                advance(T_TYPES.DELIMITER, "(")
-                parameters = parse_function_parameters()
-                return {"type": "external_fn", "name": name.value, "returns": datatype.value, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"]}
-            case "break": return {"type": "break"}
-            case "continue": return {"type": "continue"}
+                return ExternalFnStatement(parse_fn_signature())
+            case "break": return BreakStatement()
+            case "continue": return ContinueStatement()
             case "else": raise Exception("what is ts doing here dawg") # not a "top-level" statement starter, only can use in conjunction of if in front
             case "return": 
                 exp = parse_expression()
                 advance(T_TYPES.DELIMITER, ";")
-                return {"type": "return", "value": exp}
+                return ReturnStatement(exp)
             case "while": 
                 exp = parse_expression()
                 advance(T_TYPES.DELIMITER, "{")
-                return {"type": "while", "condition": exp, "block": {"code": parse_block(), "symbol_table": None}}
+                return WhileStatement(exp, parse_block())
             case "if": 
                 exp = parse_expression()
                 advance(T_TYPES.DELIMITER, "{")
-                if_block = parse_block()
+                if_block: Block = parse_block()
                 if not peekis(T_TYPES.KEYWORD, "else"): # None/eof or its just not else
-                    return IfStatement(exp, {"code": if_block, "symbol_table": None})
+                    return IfStatement(exp, if_block)
                 else: 
                     advance() # keyword:else
                     advance(T_TYPES.DELIMITER, "{")
-                    return {"type": "if_else", "condition": exp, "then-block": {"code": if_block, "symbol_table": None}, "else-block": {"code": parse_block(), "symbol_table": None}}
+                    return IfElseStatement(exp, if_block, parse_block())
         raise Exception("keyword not keyword, dev error")
     else: 
         # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
         expr = parse_expression(allow_assignment=True)
         advance(T_TYPES.DELIMITER, ";")
-        return {"type": "expr", "expression": expr}
+        return ExpressionStatement(expr)
 
 while tokens: 
     ast["block"]["code"].append(parse_statement())
