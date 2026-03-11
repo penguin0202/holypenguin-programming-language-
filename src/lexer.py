@@ -34,7 +34,7 @@ class Token:
     def __eq__(self, other: "Token"): 
         return self.type == other.type and self.value == other.value and self.datatype == other.datatype
 
-class Code(): 
+class Lexer(): 
     def __init__(self, filename:str) -> None: 
         self.tokens: list[Token] = []
         self.index: int = 0

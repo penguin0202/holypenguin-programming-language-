@@ -1,5 +1,7 @@
 from json_funcs import *
 import os
+from lexer import *
+from parser import *
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = os.path.join(SCRIPT_DIR, "parsed.txt")
@@ -14,6 +16,12 @@ BOOL = "bool"
 INT = "int"
 
 next_scope_id = 0
+
+def check_duplicate_parameter_names(fn_signature: FnSignatureThing): 
+    seen_names: list[str] = []
+    for name in fn_signature.param_names: 
+        assert name not in seen_names, f"duplicate parameter '{name}'"
+        seen_names.append(name)
 
 # this also checks for duplicate parameter names
 def grab_fn_signature(parsed_fn) -> tuple: 
@@ -60,7 +68,7 @@ def is_variable() -> bool:
 # marker/function_context now looks like this: 
 # [ {"name": name, "params": params}, {"name": name, "params": params}, ...]
 function_context = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
-def enter_function(name, param_datatypes, param_names, returns) -> None: function_context.append({"name": name, "parameter_datatypes": param_datatypes, "parameter_names": param_names, "returns": returns})
+def enter_function(fn_signature: FnSignatureThing) -> None: function_context.append(fn_signature)
 def exit_function() -> None: function_context.pop(-1)
 def current_function() -> dict: return function_context[-1]
 def is_in_function() -> bool: return len(function_context) > 0
@@ -148,12 +156,12 @@ def pop_scope() -> None | dict:
     symbol_table.pop() # popped last item, aka last inserted item
     return # you can return the popped scope by putting the above here, but right now i have no sue of debugging yet (sue? i meant use)
 
-def expression_type(expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
+def expression_type(expression: Expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
     # also handles assignment; the parser already checked that expressions can have - 
     # at most 1 assignment, and its position is going to be in expr_stmnt s
-    match expression["type"]: 
+    match expression.type: 
         case "literal":
-            return expression["datatype"]
+            return expression.get("datatype")
 
         case "fn_call": # {"type": "fn_call", "name": left, "args": parse_function_arguments()}
             # check if function exists
@@ -202,7 +210,7 @@ def expression_type(expression) -> str | None: # None possibly, because of assig
             return BOOL
         
         case "unary_assignment":
-            operator = expression["operator"]
+            operator = expression.get("operator")
             variable = expression["variable"]
             assert is_lvalue(variable), "must be lvalue"
             vt = expression_type(variable)
@@ -278,41 +286,36 @@ def analyze_statementS(statementS) -> None:
     for statement in statementS:
         analyze_statement(statement)
 
-def analyze_statement(statement) -> None: 
-    match statement["type"]:
-        
-        case "module": 
-            block = statement["block"]
+def analyze_statement(statement: Statement) -> None: 
+    # IfStatement | BlockStatement | VarDeclStatement | FnDeclStatement | ExternFnStatement | BreakStatement
+    #  | ContinueStatement | ReturnStatement | WhileStatement | IfElseStatement | ExpressionStatement
+    match statement:
+        case IfStatement(condition, block): 
             push_scope(block)
-            analyze_statementS(block["code"])
+            analyze_statementS(block.code)
             pop_scope()
 
-        case "var_decl":
-            name = statement["name"]
-            datatype = statement["datatype"]
+        case VarDeclStatement(name, datatype):
             add_variable_symbol(name, datatype)
 
-        case "block":
-            block = statement["block"]
+        case BlockStatement(block):
             push_scope(block)
-            analyze_statementS(block["code"])
+            analyze_statementS(block.code)
             pop_scope()
 
-        case "fn_decl":     
+        case FnDeclStatement(fn_signature, block):
                                                                 # duplicate names already checked here
             name, returns, parameter_datatypes, parameter_names = grab_fn_signature(statement)
             add_function_symbol(name, parameter_datatypes, parameter_names, returns)
 
-            block = statement["block"]
-
             push_scope(block)
-            enter_function(name, parameter_datatypes, parameter_names, returns)
+            enter_function(fn_signature)
 
             # add parameters into the function (same 'pool' as the local variables)
             for param_name, param_datatype in zip(parameter_names, parameter_datatypes): 
                 add_variable_symbol(param_name, param_datatype)
 
-            analyze_statementS(block["code"])
+            analyze_statementS(block.code)
             # add parameters into that scope -> make them appear initialized
             # elaborating on my previous comment, after i have all done you know, scope issues, i will move on to - 
             # solving uninitialized issues, where every variable (and function if i allow undefined functions that has a signature) - 
@@ -321,76 +324,63 @@ def analyze_statement(statement) -> None:
             exit_function()
             pop_scope()
 
-        case "if":
+        case IfStatement(condition, block): 
             # no need to have a context/stack/a single global (bit) flag for a selection statement
             # because there isnt anything you cant do outside
             # of an if block you can only do inside an if block (e.g. while loops have break and continue
             # ; and functions have return statements)
-            condition = statement["condition"]
             assert expression_type(condition) == BOOL
 
-            block = statement["block"]
             push_scope(block)
-            analyze_statementS(block["code"])
+            analyze_statementS(block.code)
             pop_scope()
 
-        case "if_else":
+        case IfElseStatement(condition, then_block, else_block):
             # hello, past you here, no need to have a context/stack/a single global (bit) flag
             # because there isnt anything you cant do outside
             # of an if block you can only do inside an if block (e.g. while loops have break and continue
             # ; and functions have return statements)
-            condition = statement["condition"]
             assert expression_type(condition) == BOOL
-
-            then_block = statement["then-block"]
-            else_block = statement["else-block"]
             
             push_scope(then_block) # the if part starts
-            analyze_statementS(then_block["code"])
+            analyze_statementS(then_block.code)
             pop_scope() # the if part ends
 
             push_scope(else_block) # the else part starts
-            analyze_statementS(else_block["code"])
+            analyze_statementS(else_block.code)
             pop_scope() # the else part ends
 
-        case "while":
-            condition = statement["condition"]
+        case WhileStatement(condition, block):
             assert expression_type(condition) == BOOL
             
-            block = statement["block"]
             push_scope(block)
             enter_loop()
-            analyze_statementS(block["code"])
+            analyze_statementS(block.code)
             exit_loop()
             pop_scope()
 
-        case "return":
+        case ReturnStatement(value):
             # no void functions :sad:
             assert is_in_function(), "return EXPRESSION statements can only be used inside functions!" # though i dont know what I am currently in
-
-            return_value = statement["value"]
 
             # expected type is the type the function, that the return statement here lives in, is supposed to return
             le_function = current_function()
             fn_name = le_function["name"]
             expected_type = le_function["returns"]
 
-            assert expression_type(return_value) == expected_type, f"Cannot return the datatype '{return_value}' from function '{fn_name}', because it is supposed to return '{expected_type}'"
+            assert expression_type(value) == expected_type, f"Cannot return the datatype '{value}' from function '{fn_name}', because it is supposed to return '{expected_type}'"
 
-        case "continue": assert is_in_loop(), "continue statements can only be used inside loops"
-        case "break": assert is_in_loop(), "break statements can only be used inside loops"
+        case ContinueStatement(): assert is_in_loop(), "continue statements can only be used inside loops"
+        case BreakStatement(): assert is_in_loop(), "break statements can only be used inside loops"
             
-        case "external_fn":
+        case ExternFnStatement(fn_signature):
             # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
             name, returns, parameter_datatypes, parameter_names = grab_fn_signature(statement)
             add_function_symbol(name, parameter_datatypes, parameter_names, returns)
             # congrats, love
         
-        case "expr":
-            expression = statement["expression"]
+        case ExpressionStatement(expression):
             expression_type(expression) # i dont need the type, i just need it to check validity
-
-
 
 push_scope(None)
 analyze_statementS(statements)
