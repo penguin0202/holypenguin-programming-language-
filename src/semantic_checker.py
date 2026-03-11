@@ -159,11 +159,11 @@ def pop_scope() -> None | dict:
 def expression_type(expression: Expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
     # also handles assignment; the parser already checked that expressions can have - 
     # at most 1 assignment, and its position is going to be in expr_stmnt s
-    match expression.type: 
-        case "literal":
-            return expression.get("datatype")
+    match expression: 
+        case LiteralExpression(datatype, value):
+            return datatype
 
-        case "fn_call": # {"type": "fn_call", "name": left, "args": parse_function_arguments()}
+        case FnCallExpression(name, args): # {"type": "fn_call", "name": left, "args": parse_function_arguments()}
             # check if function exists
             # then check if parameters are correct-o
             # name = expression["name"]["value"] # im not sure about the ["value"] placement
@@ -192,37 +192,29 @@ def expression_type(expression: Expression) -> str | None: # None possibly, beca
             # use that to get the return inside the set of a function
             pass
 
-        case "identifier": 
-            name = expression["value"]
+        case IdentifierExpression(name): 
             assert symbol_exists(name), "Variable undeclared"
             variable = lookup_symbol(name)
             assert is_variable(variable), "name referenced is not a variable, most likely its a function"
             return variable["datatype"]
         
-        case "negate_expr":
-            operand = expression["operand"]
+        case NegateExpression(operand):
             assert expression_type(operand) == INT
             return INT # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
         
-        case "not_expr":
-            operand = expression["operand"]
+        case NotExpression(operand):
             assert expression_type(operand) == BOOL
             return BOOL
         
-        case "unary_assignment":
-            operator = expression.get("operator")
-            variable = expression["variable"]
+        case UnaryAssignmentExpression(operator, variable):
             assert is_lvalue(variable), "must be lvalue"
             vt = expression_type(variable)
             match operator:
                 case "!!": assert vt == BOOL
                 case "++" | "--": assert vt == INT
 
-        case "binary_assignment": # "=" | "+=" | "-=" | "*=" | "/=" | "%=": 
-            operator = expression["operator"]
-            lvalue = expression["variable"]
+        case BinaryAssignmentExpression(operator, lvalue, rvalue): # "=" | "+=" | "-=" | "*=" | "/=" | "%=": 
             assert is_lvalue(lvalue), "must be lvalue" # from now on, lvalues are already checked for actual lvalue
-            rvalue = expression["value"]
             lt = expression_type(lvalue)
             rt = expression_type(rvalue)
             match operator: 
@@ -246,10 +238,7 @@ def expression_type(expression: Expression) -> str | None: # None possibly, beca
                     # variable must be float type, because this is true division that results in floats every time, even if it's 6/2
                     # catch phrase is "as accurately as possible, while guranteeing uniformity"
 
-        case "binary_expr":
-            operator = expression["operator"]
-            left = expression["left"]
-            right = expression["right"]
+        case BinaryExprExpression(operator, left, right):
             lt = expression_type(left)
             rt = expression_type(right)
 
@@ -305,14 +294,13 @@ def analyze_statement(statement: Statement) -> None:
 
         case FnDeclStatement(fn_signature, block):
                                                                 # duplicate names already checked here
-            name, returns, parameter_datatypes, parameter_names = grab_fn_signature(statement)
-            add_function_symbol(name, parameter_datatypes, parameter_names, returns)
+            add_function_symbol(fn_signature.name, fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
 
             push_scope(block)
             enter_function(fn_signature)
 
             # add parameters into the function (same 'pool' as the local variables)
-            for param_name, param_datatype in zip(parameter_names, parameter_datatypes): 
+            for param_name, param_datatype in zip(fn_signature.param_names, fn_signature.param_datatypes): 
                 add_variable_symbol(param_name, param_datatype)
 
             analyze_statementS(block.code)
@@ -375,8 +363,7 @@ def analyze_statement(statement: Statement) -> None:
             
         case ExternFnStatement(fn_signature):
             # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
-            name, returns, parameter_datatypes, parameter_names = grab_fn_signature(statement)
-            add_function_symbol(name, parameter_datatypes, parameter_names, returns)
+            add_function_symbol(fn_signature.name, fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
             # congrats, love
         
         case ExpressionStatement(expression):

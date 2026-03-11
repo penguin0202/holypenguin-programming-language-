@@ -1,13 +1,8 @@
-from json_funcs import *
-import os
 from lexer import Token
 from TOKEN_TYPES import *
 from StatementTypes import *
 from ExpressionTypes import *
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
-OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "parsed.txt")
+from dataclasses import dataclass
 
 # there is not variable_initialization function because that would require context
 
@@ -69,21 +64,12 @@ class Block():
     def code(self): 
         return self._code
 
-class FnSignatureThing(): # {"type": "fn_decl", "returns": datatype.value, "name": name.value, "param_names": parameters["names"], "param_datatypes": parameters["datatypes"], "block": {"code": parse_block(), "symbol_table": None}}
-    def __init__(self, name, returns, param_names, param_datatypes): 
-        self._name = name
-        self._returns = returns
-        self._param_names = param_names
-        self._param_datatypes = param_datatypes
-    
-    @property
-    def name(self): return self._name
-    @property
-    def returns(self): return self._returns
-    @property
-    def param_names(self): return self._param_names
-    @property
-    def param_datatypes(self): return self._param_datatypes
+@dataclass
+class FnSignatureThing(): 
+    name: str
+    returns: str
+    param_names: list[str]
+    param_datatypes: list[str]
 
 class Parser(): 
     def __init__(self) -> None: 
@@ -94,8 +80,8 @@ class Parser():
     def EOF(self): 
         return self.index >= len(self.tokens)
     def peek(self) -> Token: return self.tokens[self.index] if self.tokens else Token.EOF()
-    def peekis(self, type) -> bool: return self.peek().type == type
-    def peekis(self, type, value) -> bool: 
+    def match(self, type) -> bool: return self.peek().type == type
+    def match(self, type, value) -> bool: 
         token = self.peek()
         if token.type != type: return False
         return token.value == value
@@ -120,8 +106,8 @@ class Parser():
             token: Token = self.advance()
             assert token != Token.EOF() , "Expected value, instead EOF"
             match token.type: 
-                case T_TYPES.LITERAL: return Expression("literal", datatype=token.datatype, value=token.value)
-                case T_TYPES.IDENTIFIER: return Expression("identifier", value=token.value)
+                case T_TYPES.LITERAL: return LiteralExpression(token.datatype, token.value)
+                case T_TYPES.IDENTIFIER: return IdentifierExpression(token.value)
                 case T_TYPES.OPERATOR: 
                     match token.value: 
                         case "-": return NegateExpression(parse_atom())
@@ -149,9 +135,9 @@ class Parser():
                     # make it so that once a named parameter is, well, named, all consecutive parameter assignation must also be named
                     # look at you using fancy words
                     while not self.EOF(): 
-                        if self.peekis(T_TYPES.DELIMITER, ")"): break
+                        if self.match(T_TYPES.DELIMITER, ")"): break
                         arguments.append(self.parse_expression())
-                        if self.peekis(T_TYPES.DELIMITER, ")"): break
+                        if self.match(T_TYPES.DELIMITER, ")"): break
                         self.advance(T_TYPES.DELIMITER, ",")
                     self.advance(T_TYPES.DELIMITER, ")")
                     left = FnCallExpression(left, arguments)
@@ -172,7 +158,7 @@ class Parser():
     def parse_block(self) -> Block: 
         block: Block = Block()
         while not self.EOF(): 
-            if self.peekis(T_TYPES.DELIMITER, "}"): break
+            if self.match(T_TYPES.DELIMITER, "}"): break
             block.add(self.parse_statement())
             assert not self.EOF(), "Expected } (eof)"
         self.advance(T_TYPES.DELIMITER, "}")
@@ -185,12 +171,12 @@ class Parser():
         parameter_datatypes = []
         parameter_names = []
         while not self.EOF(): 
-            if self.peekis(T_TYPES.DELIMITER, ")"): break
+            if self.match(T_TYPES.DELIMITER, ")"): break
             datatype: Token = self.advance(T_TYPES.DATATYPE)
             name: Token = self.advance(T_TYPES.IDENTIFIER)
             parameter_datatypes.append(datatype.value)
             parameter_names.append(name.value)
-            if self.peekis(T_TYPES.DELIMITER, ")"): break
+            if self.match(T_TYPES.DELIMITER, ")"): break
             self.advance(T_TYPES.DELIMITER, ",") # allows trailing commas for no particular reason
         self.advance(T_TYPES.DELIMITER, ")")
         # function overloading, a name of a function will be a set with keys of an array of its parameters 
@@ -233,7 +219,7 @@ class Parser():
                     exp = self.parse_expression()
                     self.advance(T_TYPES.DELIMITER, "{")
                     if_block: Block = self.parse_block()
-                    if not self.peekis(T_TYPES.KEYWORD, "else"): # None/eof or its just not else
+                    if not self.match(T_TYPES.KEYWORD, "else"): # None/eof or its just not else
                         return IfStatement(exp, if_block)
                     else: 
                         self.advance() # keyword:else

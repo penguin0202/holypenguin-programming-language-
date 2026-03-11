@@ -7,7 +7,7 @@ class LiteralExpression():
 
 @dataclass
 class IdentifierExpression(): 
-    value: str
+    name: str
 
 @dataclass
 class NegateExpression(): 
