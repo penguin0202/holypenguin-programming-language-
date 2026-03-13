@@ -17,46 +17,30 @@ INT = "int"
 
 next_scope_id = 0
 
-def check_duplicate_parameter_names(fn_signature: FnSignatureThing): 
-    seen_names: list[str] = []
-    for name in fn_signature.param_names: 
-        assert name not in seen_names, f"duplicate parameter '{name}'"
-        seen_names.append(name)
 
-# this also checks for duplicate parameter names
-def grab_fn_signature(parsed_fn) -> tuple: 
-    #guard
-    type = parsed_fn["type"]
-    assert type in ["fn_decl", "external_function_declaration"], "expected a parsed function dictionary"
-    
-    name = parsed_fn["name"]
-    returns = parsed_fn["returns"]
-    parameter_datatypes = parsed_fn["param_datatypes"]
-    parameter_names = parsed_fn["param_names"]
+class Scope(): 
+    def __init__(self, parent_id): 
+        pass
 
-    # PARAM CHECK----------
-    seen_parameter_names = []
-
-    for name in parameter_names: 
-        # does not care about type of duplicate name
-        assert name not in seen_parameter_names, f"duplicate parameter '{name}'"
-        seen_parameter_names.append(name)
-    # PARAM CHECK DONE -------
-
-    return name, returns, parameter_datatypes, parameter_names
+class SymbolTable(): 
+    def __init__(self): 
+        pass
+    def push_scope(self): 
+        pass
+    def pop_scope(self): 
+        pass
 
 # check if expression (not the datatype of it) is assignable
 # variables
 # array accesses (in the future)
 # member accesses (in the future)
 # function calls (if pointers are added, in the future)
-def is_lvalue(expression) -> bool:
-    type = expression["type"]
+def is_lvalue(expression: Expression) -> bool:
     # next is array access
     # then next is dereferencing (also a function that returns a pointer)
     # if its member access, check every name
     # if its identifier, check if its a function, and then check if its toplevel
-    if type == "identifier": 
+    if type(expression) is IdentifierExpression:  
         return True
     return False
 
@@ -67,10 +51,10 @@ def is_variable() -> bool:
 # to identify what function is being returned
 # marker/function_context now looks like this: 
 # [ {"name": name, "params": params}, {"name": name, "params": params}, ...]
-function_context = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
+function_context: list[FnSignatureThing] = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
 def enter_function(fn_signature: FnSignatureThing) -> None: function_context.append(fn_signature)
-def exit_function() -> None: function_context.pop(-1)
-def current_function() -> dict: return function_context[-1]
+def exit_function() -> None: return function_context.pop(-1)
+def current_function() -> FnSignatureThing: return function_context[-1]
 def is_in_function() -> bool: return len(function_context) > 0
 
 # did not make a loop_context because i dont think i need to store any metadata regarding the loop
@@ -87,9 +71,20 @@ def add_variable_symbol(name, datatype, scope_id) -> None:
     the_scope_symbols[name] = {"kind": "variable", "datatype": datatype}
     # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
 
-def add_function_symbol(name, param_datatypes, param_names, returns, scope_id) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
+def add_function_symbol(fn_signature: FnSignatureThing, scope_id) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
+    name = fn_signature.name
+    returns = fn_signature.returns
+    param_datatypes = fn_signature.param_datatypes
+    param_names = fn_signature.param_names
     assert symbol_table, "Cannot add symbol, no scope exists"
     the_scope_symbols = symbol_table[scope_id]["symbols"]
+
+    # check duplicate parameter names
+    seen_names: list[str] = []
+    for name in param_names: 
+        assert name not in seen_names, f"duplicate parameter '{name}'"
+        seen_names.append(name)
+
     if name in the_scope_symbols: 
         # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
         func = the_scope_symbols[name]
@@ -156,7 +151,7 @@ def pop_scope() -> None | dict:
     symbol_table.pop() # popped last item, aka last inserted item
     return # you can return the popped scope by putting the above here, but right now i have no sue of debugging yet (sue? i meant use)
 
-def expression_type(expression: Expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
+def expression_datatype(expression: Expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
     # also handles assignment; the parser already checked that expressions can have - 
     # at most 1 assignment, and its position is going to be in expr_stmnt s
     match expression: 
@@ -173,7 +168,7 @@ def expression_type(expression: Expression) -> str | None: # None possibly, beca
             # check if parameters work
             # given_datatypes = []
             # for exp in expression["args"]: 
-            #    given_datatypes.append(expression_type(exp))
+            #    given_datatypes.append(expression_datatype(exp))
             # given_datatypes = tuple(given_datatypes)
             # now, given_datatypes is a list of strings, each string represents its corresponding -
             # argument's resulting datatype
@@ -199,30 +194,30 @@ def expression_type(expression: Expression) -> str | None: # None possibly, beca
             return variable["datatype"]
         
         case NegateExpression(operand):
-            assert expression_type(operand) == INT
+            assert expression_datatype(operand) == INT
             return INT # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
         
         case NotExpression(operand):
-            assert expression_type(operand) == BOOL
+            assert expression_datatype(operand) == BOOL
             return BOOL
         
         case UnaryAssignmentExpression(operator, variable):
             assert is_lvalue(variable), "must be lvalue"
-            vt = expression_type(variable)
+            vt = expression_datatype(variable)
             match operator:
                 case "!!": assert vt == BOOL
                 case "++" | "--": assert vt == INT
 
         case BinaryAssignmentExpression(operator, lvalue, rvalue): # "=" | "+=" | "-=" | "*=" | "/=" | "%=": 
             assert is_lvalue(lvalue), "must be lvalue" # from now on, lvalues are already checked for actual lvalue
-            lt = expression_type(lvalue)
-            rt = expression_type(rvalue)
+            lt = expression_datatype(lvalue)
+            rt = expression_datatype(rvalue)
             match operator: 
                 case "=": 
                     # check l-value
-                    # (the symbol of the variable (can be member_access) is already gotten using expression_type (function returns variable's datatype, is stored in val_datatype))
+                    # (the symbol of the variable (can be member_access) is already gotten using expression_datatype (function returns variable's datatype, is stored in val_datatype))
                     # check ^ datatype -- is it the same as val_datatype (done below)
-                    # if expression_type(lvalue) != expression_type(rvalue): error(f"datatyps not compatable in variable assigning: expected '{lvalue_datatype}', got '{rvalue_datatype}'")
+                    # if expression_datatype(lvalue) != expression_datatype(rvalue): error(f"datatyps not compatable in variable assigning: expected '{lvalue_datatype}', got '{rvalue_datatype}'")
                     # i am not toooo sure about assigning 1 to a float variable, maybe i could promote it
                     # same with char into a string variable
                     assert lt == rt
@@ -239,8 +234,8 @@ def expression_type(expression: Expression) -> str | None: # None possibly, beca
                     # catch phrase is "as accurately as possible, while guranteeing uniformity"
 
         case BinaryExprExpression(operator, left, right):
-            lt = expression_type(left)
-            rt = expression_type(right)
+            lt = expression_datatype(left)
+            rt = expression_datatype(right)
 
             match operator: 
                 case "==" | "!=":
@@ -294,7 +289,7 @@ def analyze_statement(statement: Statement) -> None:
 
         case FnDeclStatement(fn_signature, block):
                                                                 # duplicate names already checked here
-            add_function_symbol(fn_signature.name, fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
+            add_function_symbol(fn_signature)
 
             push_scope(block)
             enter_function(fn_signature)
@@ -317,7 +312,7 @@ def analyze_statement(statement: Statement) -> None:
             # because there isnt anything you cant do outside
             # of an if block you can only do inside an if block (e.g. while loops have break and continue
             # ; and functions have return statements)
-            assert expression_type(condition) == BOOL
+            assert expression_datatype(condition) == BOOL
 
             push_scope(block)
             analyze_statementS(block.code)
@@ -328,7 +323,7 @@ def analyze_statement(statement: Statement) -> None:
             # because there isnt anything you cant do outside
             # of an if block you can only do inside an if block (e.g. while loops have break and continue
             # ; and functions have return statements)
-            assert expression_type(condition) == BOOL
+            assert expression_datatype(condition) == BOOL
             
             push_scope(then_block) # the if part starts
             analyze_statementS(then_block.code)
@@ -339,7 +334,7 @@ def analyze_statement(statement: Statement) -> None:
             pop_scope() # the else part ends
 
         case WhileStatement(condition, block):
-            assert expression_type(condition) == BOOL
+            assert expression_datatype(condition) == BOOL
             
             push_scope(block)
             enter_loop()
@@ -352,22 +347,20 @@ def analyze_statement(statement: Statement) -> None:
             assert is_in_function(), "return EXPRESSION statements can only be used inside functions!" # though i dont know what I am currently in
 
             # expected type is the type the function, that the return statement here lives in, is supposed to return
-            le_function = current_function()
-            fn_name = le_function["name"]
-            expected_type = le_function["returns"]
+            fn: FnSignatureThing = current_function()
 
-            assert expression_type(value) == expected_type, f"Cannot return the datatype '{value}' from function '{fn_name}', because it is supposed to return '{expected_type}'"
+            assert expression_datatype(value) == fn.returns, f"Cannot return the datatype '{value}' from function '{fn.name}', because it is supposed to return '{fn.returns}'"
 
         case ContinueStatement(): assert is_in_loop(), "continue statements can only be used inside loops"
         case BreakStatement(): assert is_in_loop(), "break statements can only be used inside loops"
             
         case ExternFnStatement(fn_signature):
             # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
-            add_function_symbol(fn_signature.name, fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
+            add_function_symbol(fn_signature)
             # congrats, love
         
         case ExpressionStatement(expression):
-            expression_type(expression) # i dont need the type, i just need it to check validity
+            expression_datatype(expression) # i dont need the type, i just need it to check validity
 
 push_scope(None)
 analyze_statementS(statements)
