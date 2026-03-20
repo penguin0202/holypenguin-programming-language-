@@ -16,6 +16,7 @@ while token != Token.EOF():
     parser.add(token)
     token = lexer.next_token()
 
-ast = Statement("module", block=Block())
+ast = ModuleStatement(block=Block())
 while parser.peek() != Token.EOF(): # check if there is still a token, which means there is still a statement to be parsed
     ast.get("block").add(parser.parse_statement())
+

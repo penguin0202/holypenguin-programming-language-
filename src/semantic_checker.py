@@ -13,11 +13,6 @@ OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "semantically-analyzed.txt")
 statements = read_from_json(INPUT_FILENAME)
 symbol_table = {}
 
-BOOL = "bool"
-INT = "int"
-
-next_scope_id = 0
-
 # chatgpt recommends instead of just a marker, add function names (and my own thinking because of function overloading: and function parameters) - 
 # to identify what function is being returned
 # marker/function_context now looks like this: 
@@ -109,13 +104,44 @@ class SymbolTable():
         self.symbol_table: dict[int, Scope] = []
     def current_scope(self) -> Scope: 
         return self.symbol_table[self.current_scope_id]
-    def push_scope(self, parent_id): 
+    def push_scope(self, parent_id): # parent_id can be -1, to signal the module block, which has no parent
         self.current_scope_id = self.next_scope_id
         self.next_scope_id+=1
         self.symbol_table[self.current_scope_id] = Scope(parent_id)
         return self.current_scope_id
     def leave_scope(self): # DO NOT POP; current scope will now refer to the parent scope of the current scope
         self.current_scope_id = self.current_scope().parent_id
+    
+    def add_variable_symbol(self, name, datatype) -> None: 
+        assert not self.symbol_table[self.current_scope_id].symbol_exists(name), f"Symbol ({name["kind"]}) with this name already exists in your current scope!" # shadowing present
+        self.symbol_table[self.current_scope_id].symbols[name] = VarSymbol(datatype)
+        # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
+    
+    def add_function_symbol(self, fn_signature: FnSignatureThing) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
+        # check duplicate parameter names
+        seen_names: list[str] = []
+        for param_name in fn_signature.param_names: 
+            assert param_name not in seen_names, f"duplicate parameter '{param_name}'"
+            seen_names.append(param_name)
+
+        if self.symbol_table[self.current_scope_id].symbol_exists(fn_signature.name): 
+            # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
+            fn: FnSymbol = self.get_function_symbol()
+
+            # generate, from all keys inside the "set" of the function, a list containing all existing param lists
+            # no conflicts, good job david *pats head*
+
+            for overload in fn.overloads: 
+                assert fn_signature.param_datatypes != overload.datatypes, "duplicate function signature, where datatypes coincide"
+
+            # if code executes here, it means both of the following
+            # 1. the new param_datatypes don't coincide with existing ones
+            # 2. names dont coincide
+            # btw, the checking of the return types is handled by the function context
+            fn.add_overload(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
+
+        else: # if no function set already exists, create new one!
+            self.symbols[fn_signature.name] = FnSymbol(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns) # btw, return values can be different across the sets (duh)
 
     # check if expression (not the datatype of it) is assignable
     # variables
@@ -137,38 +163,24 @@ class SymbolTable():
     # this symbol exists is unlike the Scope's symbol_exists
     # this one goes through every parent scope starting from the current scope
     # then finds stuff
-    def symbol_exists(name) -> bool: 
-
-
-
+    def symbol_exists(self, name, id=None) -> bool: 
+        if id is None: 
+            id = self.current_scope_id
         
-        # build a reverse list of the symbol_table
-        for scope in reversed(symbol_table): 
-            if name in scope["symbols"]: return True
-        return False
+        if self.symbol_table[id].symbol_exists(name): 
+            return True
+        
+        if self.symbol_table[id].parent_id == -1: # no parent
+            return False
+        
+        return self.symbol_exists(name, self.symbol_table[id].parent_id)
 
     def lookup_symbol(name) -> dict: 
         for scope in symbol_table.values(): 
             if name in scope["symbols"]: return scope[name]
         raise Exception("symbol does not exist anywhere")
 
-    def push_scope(parent_id=-1) -> None: 
-        global next_scope_id, symbol_table
-        scope_id = next_scope_id
-        next_scope_id += 1
-
-        # if parent_id is guard value, then parent_id will be the last, or rather, the biggest id, which will be the last-put-on-the-stack
-        if parent_id == -1:
-            parent_id = next_scope_id - 1 # global scope will have a parent of -1 if i dont pass None
-
-        symbol_table[scope_id] = {
-            "symbols" : {},
-            "parent": parent_id,
-        }
-
-        return scope_id
-
-    def expression_datatype(expression: Expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
+    def expression_datatype(self, expression: Expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
         # also handles assignment; the parser already checked that expressions can have - 
         # at most 1 assignment, and its position is going to be in expr_stmnt s
         match expression: 
@@ -205,30 +217,30 @@ class SymbolTable():
                 pass
 
             case IdentifierExpression(name): 
-                assert symbol_exists(name), "Variable undeclared"
-                variable = lookup_symbol(name)
-                assert is_variable(variable), "name referenced is not a variable, most likely its a function"
+                assert self.symbol_exists(name), "Variable undeclared"
+                variable = self.lookup_symbol(name)
+                assert self.is_variable(variable), "name referenced is not a variable, most likely its a function"
                 return variable["datatype"]
             
             case NegateExpression(operand):
-                assert expression_datatype(operand) == INT
-                return INT # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
+                assert self.expression_datatype(operand) == "int"
+                return "int" # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
             
             case NotExpression(operand):
-                assert expression_datatype(operand) == BOOL
-                return BOOL
+                assert self.expression_datatype(operand) == "bool"
+                return "bool"
             
             case UnaryAssignmentExpression(operator, variable):
-                assert is_lvalue(variable), "must be lvalue"
-                vt = expression_datatype(variable)
+                assert self.is_lvalue(variable), "must be lvalue"
+                vt = self.expression_datatype(variable)
                 match operator:
-                    case "!!": assert vt == BOOL
-                    case "++" | "--": assert vt == INT
+                    case "!!": assert vt == "bool"
+                    case "++" | "--": assert vt == "int"
 
             case BinaryAssignmentExpression(operator, lvalue, rvalue): # "=" | "+=" | "-=" | "*=" | "/=" | "%=": 
-                assert is_lvalue(lvalue), "must be lvalue" # from now on, lvalues are already checked for actual lvalue
-                lt = expression_datatype(lvalue)
-                rt = expression_datatype(rvalue)
+                assert self.is_lvalue(lvalue), "must be lvalue" # from now on, lvalues are already checked for actual lvalue
+                lt = self.expression_datatype(lvalue)
+                rt = self.expression_datatype(rvalue)
                 match operator: 
                     case "=": 
                         # check l-value
@@ -244,34 +256,34 @@ class SymbolTable():
                         # if lvalue has a datatype of integer, then the rvalues can only result to an integer, because i cannot assign floats to an int
                         # if rvalue is a float though, then rvalue is anything goes, by anything goes i mean numerical thingies
 
-                        assert lt == INT
-                        assert rt == INT
+                        assert lt == "int"
+                        assert rt == "int"
 
                         # variable must be float type, because this is true division that results in floats every time, even if it's 6/2
                         # catch phrase is "as accurately as possible, while guranteeing uniformity"
 
             case BinaryExprExpression(operator, left, right):
-                lt = expression_datatype(left)
-                rt = expression_datatype(right)
+                lt = self.expression_datatype(left)
+                rt = self.expression_datatype(right)
 
                 match operator: 
                     case "==" | "!=":
-                        return BOOL # dont need to check types?
+                        return "bool" # dont need to check types?
 
                     case "&" | "?" | "&?": 
-                        assert lt == BOOL
-                        assert rt == BOOL
-                        return BOOL
+                        assert lt == "bool"
+                        assert rt == "bool"
+                        return "bool"
                     
                     case "<" | ">" | "<=" | ">=": 
-                        assert lt == INT
-                        assert rt == INT
-                        return BOOL
+                        assert lt == "int"
+                        assert rt == "int"
+                        return "bool"
                     
                     case "+" | "-" | "*" | "/" | "%": 
-                        assert lt == INT
-                        assert rt == INT
-                        return INT
+                        assert lt == "int"
+                        assert rt == "int"
+                        return "int"
                     
                     # this is true division, so result will always be a float, even if it's 6 / 2, itll result in 3.0
                     # for integer division, we can make it an operator, or just a function (for "a INT_DIV b", itll result in "toInt(a / b)")
@@ -283,81 +295,86 @@ class SymbolTable():
                     # modulo or remainder question unanswered
 
     # will modify statements (aka, the ast) in-place
-    def analyze_statementS(statementS) -> None: 
-        for statement in statementS:
-            analyze_statement(statement)
+    def analyze_statements(self, statements: list[Statement], parent_id) -> None: 
+        for statement in statements:
+            self.analyze_statement(statement, parent_id)
 
-    def analyze_statement(statement: Statement) -> None: 
+    def analyze_statement(self, statement: Statement, parent_id) -> None: 
         # IfStatement | BlockStatement | VarDeclStatement | FnDeclStatement | ExternFnStatement | BreakStatement
         #  | ContinueStatement | ReturnStatement | WhileStatement | IfElseStatement | ExpressionStatement
-        match statement:
+        match statement: 
+            case ModuleStatement(block): 
+                scope_id = self.push_scope(parent_id)
+                self.analyze_statements(block.code, scope_id)
+                self.leave_scope()
+
             case IfStatement(condition, block): 
-                push_scope(block)
-                analyze_statementS(block.code)
-                pop_scope()
+                scope_id = self.push_scope(parent_id)
+                self.analyze_statements(block.code, scope_id)
+                self.leave_scope()
 
             case VarDeclStatement(name, datatype):
-                add_variable_symbol(name, datatype)
+                self.symbol_table[self.current_scope_id].add_variable_symbol(name, datatype)
 
             case BlockStatement(block):
-                push_scope(block)
-                analyze_statementS(block.code)
-                pop_scope()
+                scope_id = self.push_scope(parent_id)
+                self.analyze_statements(block.code, scope_id)
+                self.leave_scope()
 
             case FnDeclStatement(fn_signature, block):
                                                                     # duplicate names already checked here
                 self.current_scope().add_function_symbol(fn_signature)
 
-                push_scope(block)
+                scope_id = self.push_scope(parent_id)
                 functions.enter_function(fn_signature)
 
                 # add parameters into the function (same 'pool' as the local variables)
                 for param_name, param_datatype in zip(fn_signature.param_names, fn_signature.param_datatypes): 
-                    add_variable_symbol(param_name, param_datatype)
+                    self.symbol_table[self.current_scope_id].add_variable_symbol(param_name, param_datatype)
 
-                analyze_statementS(block.code)
+                self.analyze_statements(block.code, scope_id)
                 # add parameters into that scope -> make them appear initialized
                 # elaborating on my previous comment, after i have all done you know, scope issues, i will move on to - 
                 # solving uninitialized issues, where every variable (and function if i allow undefined functions that has a signature) - 
                 # will have an additional flag called "initialized". Every initialization will start with this flag being false. -
                 # In the case of parameters, the flag will be set to true because it techinically will be *actually initilized* when it's used
                 functions.exit_function()
-                pop_scope()
+                self.leave_scope()
 
             case IfStatement(condition, block): 
                 # no need to have a context/stack/a single global (bit) flag for a selection statement
                 # because there isnt anything you cant do outside
                 # of an if block you can only do inside an if block (e.g. while loops have break and continue
                 # ; and functions have return statements)
-                assert expression_datatype(condition) == BOOL
+                assert self.expression_datatype(condition) == "bool"
 
-                push_scope(block)
-                analyze_statementS(block.code)
-                pop_scope()
+                scope_id = self.push_scope(parent_id)
+                self.analyze_statements(block.code, scope_id)
+                self.leave_scope()
 
             case IfElseStatement(condition, then_block, else_block):
                 # hello, past you here, no need to have a context/stack/a single global (bit) flag
                 # because there isnt anything you cant do outside
                 # of an if block you can only do inside an if block (e.g. while loops have break and continue
                 # ; and functions have return statements)
-                assert expression_datatype(condition) == BOOL
+                assert self.expression_datatype(condition) == "bool"
                 
-                push_scope(then_block) # the if part starts
-                analyze_statementS(then_block.code)
-                pop_scope() # the if part ends
+                scope_id = self.push_scope(parent_id) # the if part starts
+                self.analyze_statements(then_block.code, scope_id)
+                self.leave_scope() # the if part ends
 
-                push_scope(else_block) # the else part starts
-                analyze_statementS(else_block.code)
-                pop_scope() # the else part ends
+                scope_id = self.push_scope(parent_id) # the else part starts
+                self.analyze_statements(else_block.code, scope_id)
+                self.leave_scope() # the else part ends
 
             case WhileStatement(condition, block):
-                assert expression_datatype(condition) == BOOL
+                assert self.expression_datatype(condition) == "bool"
                 
-                push_scope(block)
+                scope_id = self.push_scope(parent_id)
                 loops.enter_one()
-                analyze_statementS(block.code)
+                self.analyze_statements(block.code, scope_id)
                 loops.exit_one()
-                pop_scope()
+                self.leave_scope()
 
             case ReturnStatement(value):
                 # no void functions :sad:
@@ -366,20 +383,20 @@ class SymbolTable():
                 # expected type is the type the function, that the return statement here lives in, is supposed to return
                 fn: FnSignatureThing = functions.current_function()
 
-                assert expression_datatype(value) == fn.returns, f"Cannot return the datatype '{value}' from function '{fn.name}', because it is supposed to return '{fn.returns}'"
+                assert self.expression_datatype(value) == fn.returns, f"Cannot return the datatype '{value}' from function '{fn.name}', because it is supposed to return '{fn.returns}'"
 
             case ContinueStatement(): assert loops.is_in_one(), "continue statements can only be used inside loops"
             case BreakStatement(): assert loops.is_in_one(), "break statements can only be used inside loops"
                 
             case ExternFnStatement(fn_signature):
                 # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
-                add_function_symbol(fn_signature)
+                self.symbol_table[self.current_scope_id].add_function_symbol(fn_signature)
                 # congrats, love
             
             case ExpressionStatement(expression):
-                expression_datatype(expression) # i dont need the type, i just need it to check validity
+                self.expression_datatype(expression) # i dont need the type, i just need it to check validity
 
-push_scope(None)
-analyze_statementS(statements)
+push_scope(-1)
+analyze_statements(statements)
 
 write_to_json(OUTPUT_FILENAME, statements) # can't do this 

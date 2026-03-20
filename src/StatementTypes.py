@@ -2,8 +2,7 @@ from dataclasses import dataclass
 from parser import Expression, Block, FnSignatureThing
 
 @dataclass
-class IfStatement(): 
-    condition: Expression
+class ModuleStatement(): 
     block: Block
 
 @dataclass
@@ -48,8 +47,14 @@ class IfElseStatement():
     else_block: Block
 
 @dataclass
+class IfStatement(): 
+    condition: Expression
+    block: Block
+
+@dataclass
 class ExpressionStatement(): 
     expression: Expression
 
-Statement = IfStatement | BlockStatement | VarDeclStatement | FnDeclStatement | ExternFnStatement\
-    | BreakStatement | ContinueStatement | ReturnStatement | WhileStatement | IfElseStatement | ExpressionStatement
+Statement = BlockStatement | VarDeclStatement | FnDeclStatement | ExternFnStatement\
+    | BreakStatement | ContinueStatement | ReturnStatement | WhileStatement | IfElseStatement\
+    | ExpressionStatement | ModuleStatement | IfStatement
