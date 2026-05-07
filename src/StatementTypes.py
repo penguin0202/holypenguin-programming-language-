@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from parser import Expression, Block, FnSignatureThing
+from parser import Expression, Block, FnSignature
 
 @dataclass
 class ModuleStatement(): 
@@ -16,12 +16,12 @@ class VarDeclStatement():
 
 @dataclass
 class FnDeclStatement(): 
-    fn_signature: FnSignatureThing
+    fn_signature: FnSignature
     block: Block
 
 @dataclass
 class ExternFnStatement(): 
-    fn_signature: FnSignatureThing
+    fn_signature: FnSignature
 
 @dataclass
 class BreakStatement(): 

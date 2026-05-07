@@ -1,28 +1,13 @@
-from json_funcs import *
-import os
 from lexer import *
 from parser import *
 from SymbolTypes import *
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INPUT_FILENAME = os.path.join(SCRIPT_DIR, "parsed.txt")
-OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "semantically-analyzed.txt")
-
-# tuples are used for hash-ability
-
-statements = read_from_json(INPUT_FILENAME)
-symbol_table = {}
-
-# chatgpt recommends instead of just a marker, add function names (and my own thinking because of function overloading: and function parameters) - 
-# to identify what function is being returned
-# marker/function_context now looks like this: 
-# [ {"name": name, "params": params}, {"name": name, "params": params}, ...]
 class FunctionContext(): 
     def __init__(self): 
-        self.context: list[FnSignatureThing] = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
-    def enter_function(self, fn_signature: FnSignatureThing): 
+        self.context: list[FnSignature] = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
+    def enter_function(self, fn_signature: FnSignature): 
         self.context.append(fn_signature)
-    def exit_function(self) -> FnSignatureThing: 
+    def exit_function(self) -> FnSignature: 
         assert self.is_in_function(), "no function present"
         return self.context.pop(-1)
     def is_in_function(self) -> bool: 
@@ -32,9 +17,6 @@ class FunctionContext():
         return self.context[-1]
 functions: FunctionContext = FunctionContext()
 
-# did not make a loop_context because i dont think i need to store any metadata regarding the loop
-# other than that I am in one so i can validate breka and continue statements
-# wait what if a loop is inside another loop nvm I solved it below
 class LoopContext(): 
     def __init__(self): 
         self.counter = 0
@@ -53,80 +35,36 @@ class Scope():
         self.parent_id = parent_id
     def symbol_exists(self, name) -> bool: 
         return name in self.symbols.keys()
-    
-    def get_function_symbol(self, name:str) -> FnSymbol: 
-        assert self.symbol_exists(name), "function does not exist yet?"
-        possible_function = self.symbols[name]
-        assert isinstance(possible_function, FnSymbol), "symbol already exists not as a function"
-        return possible_function
-    
-    def get_variable_symbol(self, name) -> VarSymbol: 
-        assert self.symbol_exists(name), "function does not exist yet?"
-        possible_variable = self.symbols[name]
-        assert isinstance(possible_variable, VarSymbol), "symbol already exists not as a variable"
-        return possible_variable
-    
-    def add_variable_symbol(self, name, datatype) -> None: 
-        assert not self.symbol_exists(name), f"Symbol ({name["kind"]}) with this name already exists in your current scope!" # shadowing present
-        self.symbols[name] = VarSymbol(datatype)
-        # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
-
-    def add_function_symbol(self, fn_signature: FnSignatureThing) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
-        # check duplicate parameter names
-        seen_names: list[str] = []
-        for param_name in fn_signature.param_names: 
-            assert param_name not in seen_names, f"duplicate parameter '{param_name}'"
-            seen_names.append(param_name)
-
-        if self.symbol_exists(fn_signature.name): 
-            # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
-            fn: FnSymbol = self.get_function_symbol()
-
-            # generate, from all keys inside the "set" of the function, a list containing all existing param lists
-            # no conflicts, good job david *pats head*
-
-            for overload in fn.overloads: 
-                assert fn_signature.param_datatypes != overload.datatypes, "duplicate function signature, where datatypes coincide"
-
-            # if code executes here, it means both of the following
-            # 1. the new param_datatypes don't coincide with existing ones
-            # 2. names dont coincide
-            # btw, the checking of the return types is handled by the function context
-            fn.add_overload(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
-
-        else: # if no function set already exists, create new one!
-            self.symbols[fn_signature.name] = FnSymbol(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns) # btw, return values can be different across the sets (duh)
 
 class SymbolTable(): 
     def __init__(self): 
-        self.next_scope_id = 0
-        self.current_scope_id = -1
-        self.symbol_table: dict[int, Scope] = []
-    def current_scope(self) -> Scope: 
-        return self.symbol_table[self.current_scope_id]
+        self.next_id: int = 0
+        self.current_id: int = -1
+        self.scopes: dict[int, Scope] = []
     def push_scope(self, parent_id): # parent_id can be -1, to signal the module block, which has no parent
-        self.current_scope_id = self.next_scope_id
-        self.next_scope_id+=1
-        self.symbol_table[self.current_scope_id] = Scope(parent_id)
-        return self.current_scope_id
+        self.current_id = self.next_id
+        self.next_id+=1
+        self.scopes[self.current_id] = Scope(parent_id)
+        return self.current_id
     def leave_scope(self): # DO NOT POP; current scope will now refer to the parent scope of the current scope
-        self.current_scope_id = self.current_scope().parent_id
+        self.current_id = self.scopes[self.current_id].parent_id
     
     def add_variable_symbol(self, name, datatype) -> None: 
-        assert not self.symbol_table[self.current_scope_id].symbol_exists(name), f"Symbol ({name["kind"]}) with this name already exists in your current scope!" # shadowing present
-        self.symbol_table[self.current_scope_id].symbols[name] = VarSymbol(datatype)
+        assert not self.scopes[self.current_id].symbol_exists(name), f"Symbol ({name["kind"]}) with this name already exists in your current scope!" # shadowing present
+        self.scopes[self.current_id].symbols[name] = VarSymbol(datatype)
         # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
     
-    def add_function_symbol(self, fn_signature: FnSignatureThing) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
+    def add_function_symbol(self, fn_signature: FnSignature) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
         # check duplicate parameter names
         seen_names: list[str] = []
-        for param_name in fn_signature.param_names: 
-            assert param_name not in seen_names, f"duplicate parameter '{param_name}'"
-            seen_names.append(param_name)
+        for name in fn_signature.param_names: 
+            assert name not in seen_names, f"duplicate parameter '{name}'"
+            seen_names.append(name)
 
-        if self.symbol_table[self.current_scope_id].symbol_exists(fn_signature.name): 
+        if self.scopes[self.current_id].symbol_exists(fn_signature.name): 
             # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
-            fn: FnSymbol = self.get_function_symbol()
+            fn = self.scopes[self.current_id].symbols[fn_signature.name]
+            assert isinstance(fn, FnSymbol), "symbol already exists not as a function"
 
             # generate, from all keys inside the "set" of the function, a list containing all existing param lists
             # no conflicts, good job david *pats head*
@@ -141,7 +79,7 @@ class SymbolTable():
             fn.add_overload(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
 
         else: # if no function set already exists, create new one!
-            self.symbols[fn_signature.name] = FnSymbol(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns) # btw, return values can be different across the sets (duh)
+            self.scopes[self.current_id].symbols[fn_signature.name] = FnSymbol(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns) # btw, return values can be different across the sets (duh)
 
     # check if expression (not the datatype of it) is assignable
     # variables
@@ -157,28 +95,31 @@ class SymbolTable():
             return True
         return False
 
-    def is_variable() -> bool:
-        raise Exception("Dev error, not implemented")
-
     # this symbol exists is unlike the Scope's symbol_exists
     # this one goes through every parent scope starting from the current scope
     # then finds stuff
     def symbol_exists(self, name, id=None) -> bool: 
-        if id is None: 
-            id = self.current_scope_id
-        
-        if self.symbol_table[id].symbol_exists(name): 
+        id = self.current_id if id is None else id
+         
+        if self.scopes[id].symbol_exists(name): 
             return True
         
-        if self.symbol_table[id].parent_id == -1: # no parent
+        if self.scopes[id].parent_id == -1: # no parent
             return False
         
-        return self.symbol_exists(name, self.symbol_table[id].parent_id)
+        return self.symbol_exists(name, self.scopes[id].parent_id)
 
-    def lookup_symbol(name) -> dict: 
-        for scope in symbol_table.values(): 
-            if name in scope["symbols"]: return scope[name]
-        raise Exception("symbol does not exist anywhere")
+    def lookup_symbol(self, name, id=None) -> Symbol: 
+        id = self.current_id if id is None else id
+        
+        if self.scopes[id].symbol_exists(name): 
+            return self.scopes[id].symbols[name]
+        
+        # after a ton of recursion, if no scope at all has the symbol, and you reached the end
+        # the end meaning the module scope, which has no parent_id, then say no symbol exists
+        assert self.scopes[id].parent_id != -1, "symbol does not exist anywhere"
+        
+        return self.lookup_symbol(name, self.scopes[id].parent_id)
 
     def expression_datatype(self, expression: Expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
         # also handles assignment; the parser already checked that expressions can have - 
@@ -217,9 +158,9 @@ class SymbolTable():
                 pass
 
             case IdentifierExpression(name): 
-                assert self.symbol_exists(name), "Variable undeclared"
+                assert self.symbol_exists(name), "Undeclared Variable"
                 variable = self.lookup_symbol(name)
-                assert self.is_variable(variable), "name referenced is not a variable, most likely its a function"
+                assert isinstance(variable, VarSymbol), "name referenced is not a variable, most likely its a function"
                 return variable["datatype"]
             
             case NegateExpression(operand):
@@ -300,8 +241,6 @@ class SymbolTable():
             self.analyze_statement(statement, parent_id)
 
     def analyze_statement(self, statement: Statement, parent_id) -> None: 
-        # IfStatement | BlockStatement | VarDeclStatement | FnDeclStatement | ExternFnStatement | BreakStatement
-        #  | ContinueStatement | ReturnStatement | WhileStatement | IfElseStatement | ExpressionStatement
         match statement: 
             case ModuleStatement(block): 
                 scope_id = self.push_scope(parent_id)
@@ -314,7 +253,7 @@ class SymbolTable():
                 self.leave_scope()
 
             case VarDeclStatement(name, datatype):
-                self.symbol_table[self.current_scope_id].add_variable_symbol(name, datatype)
+                self.add_variable_symbol(name, datatype)
 
             case BlockStatement(block):
                 scope_id = self.push_scope(parent_id)
@@ -322,15 +261,14 @@ class SymbolTable():
                 self.leave_scope()
 
             case FnDeclStatement(fn_signature, block):
-                                                                    # duplicate names already checked here
-                self.current_scope().add_function_symbol(fn_signature)
+                self.add_function_symbol(fn_signature)
 
                 scope_id = self.push_scope(parent_id)
                 functions.enter_function(fn_signature)
 
                 # add parameters into the function (same 'pool' as the local variables)
-                for param_name, param_datatype in zip(fn_signature.param_names, fn_signature.param_datatypes): 
-                    self.symbol_table[self.current_scope_id].add_variable_symbol(param_name, param_datatype)
+                for name, datatype in zip(fn_signature.param_names, fn_signature.param_datatypes): 
+                    self.add_variable_symbol(name, datatype)
 
                 self.analyze_statements(block.code, scope_id)
                 # add parameters into that scope -> make them appear initialized
@@ -381,7 +319,7 @@ class SymbolTable():
                 assert functions.is_in_function(), "return EXPRESSION statements can only be used inside functions!" # though i dont know what I am currently in
 
                 # expected type is the type the function, that the return statement here lives in, is supposed to return
-                fn: FnSignatureThing = functions.current_function()
+                fn: FnSignature = functions.current_function()
 
                 assert self.expression_datatype(value) == fn.returns, f"Cannot return the datatype '{value}' from function '{fn.name}', because it is supposed to return '{fn.returns}'"
 
@@ -390,7 +328,7 @@ class SymbolTable():
                 
             case ExternFnStatement(fn_signature):
                 # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
-                self.symbol_table[self.current_scope_id].add_function_symbol(fn_signature)
+                self.add_function_symbol(fn_signature)
                 # congrats, love
             
             case ExpressionStatement(expression):
@@ -398,5 +336,3 @@ class SymbolTable():
 
 push_scope(-1)
 analyze_statements(statements)
-
-write_to_json(OUTPUT_FILENAME, statements) # can't do this 

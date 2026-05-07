@@ -65,7 +65,7 @@ class Block():
         return self._code
 
 @dataclass
-class FnSignatureThing(): 
+class FnSignature(): 
     name: str
     returns: str
     param_names: list[str]
@@ -164,12 +164,12 @@ class Parser():
         self.advance(T_TYPES.DELIMITER, "}")
         return block
 
-    def parse_fn_signature(self) -> FnSignatureThing: 
+    def parse_fn_signature(self) -> FnSignature: 
         datatype: Token = self.advance(T_TYPES.DATATYPE)
         name: Token = self.advance(T_TYPES.IDENTIFIER)
         self.advance(T_TYPES.DELIMITER, "(")
-        parameter_datatypes = []
-        parameter_names = []
+        parameter_datatypes: list[str] = []
+        parameter_names: list[str] = []
         while not self.EOF(): 
             if self.match(T_TYPES.DELIMITER, ")"): break
             datatype: Token = self.advance(T_TYPES.DATATYPE)
@@ -181,10 +181,10 @@ class Parser():
         self.advance(T_TYPES.DELIMITER, ")")
         # function overloading, a name of a function will be a set with keys of an array of its parameters 
         # and the value of another table containing the code and the return type
-        return FnSignatureThing(name.value, datatype.value, parameter_names, parameter_datatypes)
+        return FnSignature(name.value, datatype.value, parameter_names, parameter_datatypes)
 
     def parse_statement(self) -> Statement: 
-        token = self.peek()
+        token: Token = self.peek()
         assert token != Token.EOF(), "eof, want statement"
         if token.type == T_TYPES.DELIMITER and token.value == "{": 
             self.advance() # {
@@ -198,7 +198,7 @@ class Parser():
             self.advance()
             match token.value: 
                 case "fn": 
-                    fn_signature: FnSignatureThing = self.parse_fn_signature()
+                    fn_signature: FnSignature = self.parse_fn_signature()
                     self.advance(T_TYPES.DELIMITER, "{")
                     return FnDeclStatement(fn_signature, self.parse_block())
                 case "extern": # right now this only works with functions, not any variables, plz add functionality
