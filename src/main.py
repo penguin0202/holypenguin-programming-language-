@@ -18,5 +18,5 @@ while token != Token.EOF():
 
 ast = ModuleStatement(block=Block())
 while parser.peek() != Token.EOF(): # check if there is still a token, which means there is still a statement to be parsed
-    ast.get("block").add(parser.parse_statement())
+    ast.block.add(parser.parse_statement())
 
