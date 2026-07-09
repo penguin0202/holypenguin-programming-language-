@@ -8,7 +8,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = os.path.join(SCRIPT_DIR, "test.txt")
 OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
 
-lexer: Lexer = Lexer(INPUT_FILENAME)
+code: str = ""
+with open(INPUT_FILENAME, "r") as file: 
+    code: str = file.read()
+
+lexer: Lexer = Lexer(code)
 
 parser: Parser = Parser()
 token: Token = lexer.next_token()

@@ -1,6 +1,7 @@
 from json_funcs import write_to_json
 import os
 from TOKEN_TYPES import *
+from dataclasses import dataclass
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = os.path.join(SCRIPT_DIR, "test.txt")
@@ -8,49 +9,105 @@ OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
 
 # I am not caring about tab size right now regarding position tracking
 
+@dataclass
 class Token: 
-    def __init__(self, type:int, value:str, datatype:str=None): 
-        self._type = type
-        self._value = value
-        self._datatype = datatype
-    
-    @classmethod
-    def EOF(cls): 
-        return Token(T_TYPES.INVALID, "EOF")
-    
-    @property # read-only property
-    def type(self):
-        return self._type 
-    @property
-    def value(self): 
-        return self._value
-    @property
-    def datatype(self): 
-        return self._datatype
-    
-    def __str__(self) -> str: 
-        return 
-    
-    def __eq__(self, other: "Token"): 
-        return self.type == other.type and self.value == other.value and self.datatype == other.datatype
+    type: TokenType
+    value: str|None
+    row: int
+    col: int
 
 class Lexer(): 
-    def __init__(self, filename:str) -> None: 
-        self.tokens: list[Token] = []
-        self.index: int = 0
-        with open(filename, "r") as file: 
-            self.code:list[str] = file.read()
-    def __str__(self) -> str: 
-        return self.code
+    def __init__(self, code: str) -> None: 
+        self.code: str = code
+        self.i: int = 0
+        self.row = 1
+        self.col = 1
+        self.temp_token_row = 1
+        self.temp_token_col = 1
+    def store_token_position(self): 
+        self.temp_token_row = self.row
+        self.temp_token_col = self.col
     def EOF(self) -> bool: 
-        return self.index >= len(self.code)
+        return self.i >= len(self.code)
     def peek(self) -> str: 
-        return "" if self.EOF() else self.code[self.index]
-    def advance(self) -> str: 
-        char = self.peek()
-        self.index+=1
-        return char
+        return self.code[self.i]
+    def advance(self) -> None: 
+        self.i+=1
+        self.col+=1
+    def advance_line(self) -> None: 
+        self.row+=1
+        self.col=1
+    def make_token(self, type: TokenType, value: str|None): 
+        return Token(type, value, self.temp_token_row, self.temp_token_col)
     def next_token(self) -> Token: 
+        if self.i >= len(self.code): return self.make_token(TokenType.EOF, None)
+
+        c: str = ' '
+
+        while self.i < len(self.code): 
+            c = self.peek()
+            if c == ' ': 
+                self.advance()
+                continue
+            if c == '\n': 
+                self.advance()
+                continue
+            if c == '/': 
+                self.store_token_position()
+                self.advance()
+
+                if (c := self.peek()) == '/': 
+                    self.advance()
+                    while self.i < len(self.code) and (c := self.peek()) != '\n': self.advance()
+                    self.advance()
+                    self.advance_line()
+                    continue
+
+                return self.make_token(TokenType.DIV, None)
+            
+            break
+
+        if c in "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ": 
+            word: str = c
+            self.advance()
+            while (c := self.peek()) in "0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                word += c
+                self.advance()
+            match word: 
+                case "if": return self.make_token(TokenType.KEYWORD_IF, None)
+                case "else": return self.make_token(TokenType.KEYWORD_ELSE, None)
+                case "while": return self.make_token(TokenType.KEYWORD_WHILE, None)
+                case "break": return self.make_token(TokenType.KEYWORD_BREAK, None)
+
+                case "int": return self.make_token(TokenType.DATATYPE_INT, None)
+                case "bool": return self.make_token(TokenType.DATATYPE_BOOL, None)
+
+                case "true": return self.make_token(TokenType.LITERAL_BOOL, )
+            
+            if name in ["fn", "if", "else", "while", "return", "break", "continue", "extern"]: return make_token(TokenType.)Token(T_TYPES.KEYWORD, name)
+            elif name in ["int", "bool"]: return Token(T_TYPES.DATATYPE, name)
+            elif name in ["true", "false"]: return Token(T_TYPES.LITERAL, name, datatype="bool")
+            return Token(T_TYPES.IDENTIFIER, name)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         match char := self.advance(): 
             case "": return Token.EOF()
             case "+":
