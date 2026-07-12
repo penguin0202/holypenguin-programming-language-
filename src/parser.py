@@ -9,9 +9,29 @@ from dataclasses import dataclass
 # if you worry about pointers at any point in time during the developmental phase of this project, i will slime you out taiwanigga
 
 PRECEDENCE = {
-    "=": 1,
+    TokenType.ASSIGNER: 1,
 
-    "+=": 1,
+    TokenType.OR: 2,
+    TokenType.AND: 2,
+
+    TokenType.EQUAL_TO: 3,
+    TokenType.NOT_EQUAL_TO: 3,
+
+    TokenType.LESS_THAN: 4,
+    TokenType.GREATER_THAN: 4,
+    TokenType.LESS_THAN_OR_EQUAL_TO: 4,
+    TokenType.GREATER_THAN_OR_EQUAL_TO: 4,
+
+    TokenType.ADD: 5,
+    TokenType.SUB: 5,
+    TokenType.MUL: 6,
+    TokenType.DIV: 6,
+    TokenType.MOD: 6, 
+
+    TokenType.L_PAREN: 100,
+}
+
+"""    "+=": 1,
     "-=": 1,
     "*=": 1,
 
@@ -26,30 +46,12 @@ PRECEDENCE = {
     "--": 1,
 
     "!!": 1,
-
-    "?": 2,
-    "&": 2,
+    
     "&?": 2,
-
-    "==": 3,
-    "!=": 3,
-
-    "<": 4,
-    ">": 4,
-    "<=": 4,
-    ">=": 4,
-
-    "+": 5,
-    "-": 5,
-    "*": 6,
-    "/": 6,
     "|": 6,
-    "%": 6, 
-
-    #"~": 6, 
-
-    "(": 100,
-}
+        #"~": 6, 
+    
+    """
     
 class Block(): 
     def __init__(self): 
@@ -72,14 +74,12 @@ class FnSignature():
     param_datatypes: list[str]
 
 class Parser(): 
-    def __init__(self) -> None: 
-        self.tokens:list[Token] = []
-        self.index:int = 0
-    def add(self, token: Token) -> None: 
-        self.tokens.append(token)
-    def EOF(self): 
-        return self.index >= len(self.tokens)
-    def peek(self) -> Token: return self.tokens[self.index] if self.tokens else Token.EOF()
+    def __init__(self, tokens) -> None: 
+        self.tokens:list[Token] = tokens
+        self.i:int = 0
+    def EOT(self): 
+        return self.i >= len(self.tokens)
+    def peek(self) -> Token: return self.tokens[self.i] if self.tokens else Token.EOF()
     def match(self, type) -> bool: return self.peek().type == type
     def match(self, type, value) -> bool: 
         token = self.peek()
@@ -87,40 +87,74 @@ class Parser():
         return token.value == value
     def advance(self) -> Token: 
         token = self.peek()
-        self.index+=1
+        self.i+=1
         return token
     def advance(self, type) -> Token:
         token = self.peek()
         assert token.type == type, "Expected type: " + type
-        self.index+=1
+        self.i+=1
         return token
     def advance(self, type, value) -> Token:
         token = self.peek()
         assert token.type == type, "Expected type: " + type
         assert token.value == value, "Expected value: " + value
-        self.index+=1
+        self.i+=1
         return token
     
     def parse_expression(self, min_precedence=0, allow_assignment=False) -> Expression: 
         def parse_atom() -> Expression:
-            token: Token = self.advance()
-            assert token != Token.EOF() , "Expected value, instead EOF"
-            match token.type: 
-                case T_TYPES.LITERAL: return LiteralExpression(token.datatype, token.value)
-                case T_TYPES.IDENTIFIER: return IdentifierExpression(token.value)
-                case T_TYPES.OPERATOR: 
-                    match token.value: 
-                        case "-": return NegateExpression(parse_atom())
-                        case "!": return NotExpression(parse_atom())
-                        case "(": 
-                            expr = self.parse_expression()
-                            self.advance(T_TYPES.OTHER, ")")
-                            return expr
-            raise Exception(f"Unexpected token: {token}")
+            assert not self.EOT(), "Expected value, instead EOF"
+            t = self.peek()
+            
+            if t.type == TokenType.LITERAL_INT: 
+                self.advance()
+                return LiteralExpression(t)
+            
+            if t.type == TokenType.LITERAL_BOOL_TRUE or t.type == TokenType.LITERAL_BOOL_FALSE: 
+                self.advance()
+                return LiteralExpression(t)
+            
+            if t.type == TokenType.IDENTIFIER: 
+                self.advance()
+                return IdentifierExpression(t)
+            
+            if t.type == TokenType.SUB: 
+                self.advance()
+                inner_atom = parse_atom()
+                return NegateExpression(inner_atom)
+            
+            if t.type == TokenType.NOT: 
+                self.advance()
+                inner_atom = parse_atom()
+                return NotExpression(inner_atom)
+
+            if t.type == TokenType.L_PAREN: 
+                self.advance()
+                inner_expression = self.parse_expression()
+                # consume RPAREN
+                return inner_expression
+
+            raise Exception(f"Unexpected token for parse_atom: {t}")
 
         left = parse_atom()
 
-        while not self.EOF(): 
+        while not self.EOT(): 
+            t = self.peek() # t must be an operator from now on
+
+            if t.type not in PRECEDENCE.keys(): break # for example, if you get a "}" here, this will eject
+            precedence = PRECEDENCE.get(t.type, -1) # im thinking of doing if precedence == -1, eject (same as above), but Ill sleep on it
+            if precedence < min_precedence: break # forgot what this does
+            self.advance()
+
+            if t.type == TokenType.ASSIGNER: 
+                assert allow_assignment, "AssignmentInExpression"
+                self.advance()
+                right = self.parse_expression()
+                # consume semicolon
+                left = AssignmentExpression(left, right)
+
+
+
             op_tok: Token = self.peek()
             if op_tok.type != T_TYPES.OPERATOR: break # must be an operator or some sort, not an identifier or whatnot
             operator = op_tok.value
@@ -134,7 +168,7 @@ class Parser():
                     arguments: list[Expression] = [] # no named arguments (at least now yet)
                     # make it so that once a named parameter is, well, named, all consecutive parameter assignation must also be named
                     # look at you using fancy words
-                    while not self.EOF(): 
+                    while not self.EOT(): 
                         if self.match(T_TYPES.DELIMITER, ")"): break
                         arguments.append(self.parse_expression())
                         if self.match(T_TYPES.DELIMITER, ")"): break
@@ -157,20 +191,86 @@ class Parser():
 
     def parse_block(self) -> Block: 
         block: Block = Block()
-        while not self.EOF(): 
+        while not self.EOT(): 
             if self.match(T_TYPES.DELIMITER, "}"): break
             block.add(self.parse_statement())
-            assert not self.EOF(), "Expected } (eof)"
+            assert not self.EOT(), "Expected } (eof)"
         self.advance(T_TYPES.DELIMITER, "}")
         return block
 
-    def parse_fn_signature(self) -> FnSignature: 
+    def parse_statement(self) -> Statement: 
+        assert not self.EOT(), "eof, want statement"
+
+        t: Token = self.peek()
+
+        if t.type == TokenType.DATATYPE_INT: 
+            self.advance()
+            if (t := self.peek()).type == TokenType.IDENTIFIER: 
+                variable_name = t
+                self.advance()
+                if (t := self.peek()).type == TokenType.ASSIGNER: 
+                    self.advance()
+                    if (t := self.peek()).type == TokenType.LITERAL_INT: 
+                        integer_value = t
+                        self.advance()
+                        # consume semicolon & advance
+                        return LI
+
+            # consume singular identifier
+            # consume equals sign
+            # consume integer value
+            # consume semicolon
+        
+        if t.type == TokenType.DATATYPE_BOOL: 
+            self.advance()
+            # consume singular identifier
+            # consume equals sign
+            # consume integer value
+            # consume semicolon
+
+        if t.type == TokenType.L_BRACKET: 
+            self.advance() # {
+            return BlockStatement(self.parse_block())
+        
+        if t.type == TokenType.KEYWORD_IF: 
+            self.advance()
+            # consume LPAREN -- yep I'm doing this
+            if_condition = self.parse_expression() # make sure checking for expressions ignore the RPAREN if not paired with a LPAREN
+            # consume RPAREN
+            if_statement = self.parse_statement() # peek() will not return the next free token
+            if (t := self.peek()).type == TokenType.KEYWORD_ELSE: 
+                self.advance()
+                else_statement = self.parse_statement()
+                return IfElseStatement(if_condition, if_statement, else_statement)
+            return IfStatement(if_condition, if_statement)
+
+        if t.type == TokenType.KEYWORD_WHILE: 
+            self.advance()
+            # consume LPAREN
+            while_condition = self.parse_expression()
+            # consume RPAREN
+            while_statement = self.parse_statement()
+            return WhileStatement(while_condition, while_statement)
+
+        if t.type == TokenType.KEYWORD_BREAK: 
+            self.advance()
+            # consume semicolon
+            return BreakStatement()
+        
+        expression_statement = self.parse_expression(allow_assignment=True)
+        # consume semicolon (advance first tho)
+        return ExpressionStatement(expression_statement)
+
+
+
+
+"""    def parse_fn_signature(self) -> FnSignature: 
         datatype: Token = self.advance(T_TYPES.DATATYPE)
         name: Token = self.advance(T_TYPES.IDENTIFIER)
         self.advance(T_TYPES.DELIMITER, "(")
         parameter_datatypes: list[str] = []
         parameter_names: list[str] = []
-        while not self.EOF(): 
+        while not self.EOT(): 
             if self.match(T_TYPES.DELIMITER, ")"): break
             datatype: Token = self.advance(T_TYPES.DATATYPE)
             name: Token = self.advance(T_TYPES.IDENTIFIER)
@@ -181,53 +281,36 @@ class Parser():
         self.advance(T_TYPES.DELIMITER, ")")
         # function overloading, a name of a function will be a set with keys of an array of its parameters 
         # and the value of another table containing the code and the return type
-        return FnSignature(name.value, datatype.value, parameter_names, parameter_datatypes)
+        return FnSignature(name.value, datatype.value, parameter_names, parameter_datatypes)"""
 
-    def parse_statement(self) -> Statement: 
-        token: Token = self.peek()
-        assert token != Token.EOF(), "eof, want statement"
-        if token.type == T_TYPES.DELIMITER and token.value == "{": 
-            self.advance() # {
-            return BlockStatement(self.parse_block())
-        if token.type == T_TYPES.DATATYPE: 
-            self.advance()
-            name: Token = self.advance(T_TYPES.IDENTIFIER)
+
+
+
+
+"""if t.type == T_TYPES.DATATYPE: 
+    self.advance()
+    name: Token = self.advance(T_TYPES.IDENTIFIER)
+    self.advance(T_TYPES.DELIMITER, ";")
+    return VarDeclStatement(name.value, t.value) # no variable declaration an dinitialization in the same place
+if t.type == T_TYPES.KEYWORD: 
+    self.advance()
+    match t.value: 
+        case "fn": 
+            fn_signature: FnSignature = self.parse_fn_signature()
+            self.advance(T_TYPES.DELIMITER, "{")
+            return FnDeclStatement(fn_signature, self.parse_block())
+        case "extern": # right now this only works with functions, not any variables, plz add functionality
+            self.advance(T_TYPES.KEYWORD, "fn")
+            return ExternFnStatement(self.parse_fn_signature())
+        case "continue": return ContinueStatement()
+        case "else": raise Exception("what is ts doing here dawg") # not a "top-level" statement starter, only can use in conjunction of if in front
+        case "return": 
+            exp = self.parse_expression()
             self.advance(T_TYPES.DELIMITER, ";")
-            return VarDeclStatement(name.value, token.value) # no variable declaration an dinitialization in the same place
-        if token.type == T_TYPES.KEYWORD: 
-            self.advance()
-            match token.value: 
-                case "fn": 
-                    fn_signature: FnSignature = self.parse_fn_signature()
-                    self.advance(T_TYPES.DELIMITER, "{")
-                    return FnDeclStatement(fn_signature, self.parse_block())
-                case "extern": # right now this only works with functions, not any variables, plz add functionality
-                    self.advance(T_TYPES.KEYWORD, "fn")
-                    return ExternFnStatement(self.parse_fn_signature())
-                case "break": return BreakStatement()
-                case "continue": return ContinueStatement()
-                case "else": raise Exception("what is ts doing here dawg") # not a "top-level" statement starter, only can use in conjunction of if in front
-                case "return": 
-                    exp = self.parse_expression()
-                    self.advance(T_TYPES.DELIMITER, ";")
-                    return ReturnStatement(exp)
-                case "while": 
-                    exp = self.parse_expression()
-                    self.advance(T_TYPES.DELIMITER, "{")
-                    return WhileStatement(exp, self.parse_block())
-                case "if": 
-                    exp = self.parse_expression()
-                    self.advance(T_TYPES.DELIMITER, "{")
-                    if_block: Block = self.parse_block()
-                    if not self.match(T_TYPES.KEYWORD, "else"): # None/eof or its just not else
-                        return IfStatement(exp, if_block)
-                    else: 
-                        self.advance() # keyword:else
-                        self.advance(T_TYPES.DELIMITER, "{")
-                        return IfElseStatement(exp, if_block, self.parse_block())
-            raise Exception("keyword not keyword, dev error")
-        else: 
-            # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
-            expr: Expression = self.parse_expression(allow_assignment=True)
-            self.advance(T_TYPES.DELIMITER, ";")
-            return ExpressionStatement(expr)
+            return ReturnStatement(exp)
+    raise Exception("keyword not keyword, dev error")
+else: 
+    # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
+    expr: Expression = self.parse_expression(allow_assignment=True)
+    self.advance(T_TYPES.DELIMITER, ";")
+    return ExpressionStatement(expr)"""

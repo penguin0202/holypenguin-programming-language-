@@ -6,6 +6,8 @@ class TokenType(Enum):
     EOF = auto(),
     UNKNOWN = auto(), 
 
+    SEMICOLON = auto()
+
     KEYWORD_IF = auto(),
     KEYWORD_ELSE = auto(),
     KEYWORD_WHILE = auto(),
@@ -14,7 +16,8 @@ class TokenType(Enum):
     DATATYPE_INT = auto(),
     DATATYPE_BOOL = auto(),
 
-    LITERAL_BOOL = auto(),
+    LITERAL_BOOL_TRUE = auto(),
+    LITERAL_BOOL_FALSE = auto()
     LITERAL_INT = auto(),
     LITERAL_STRING = auto(), # temporary to show that a string of characters exist, not an actual type
 

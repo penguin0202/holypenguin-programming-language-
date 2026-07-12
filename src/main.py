@@ -14,13 +14,12 @@ with open(INPUT_FILENAME, "r") as file:
 
 lexer: Lexer = Lexer(code)
 
-parser: Parser = Parser()
-token: Token = lexer.next_token()
-while token != Token.EOF(): 
-    parser.add(token)
-    token = lexer.next_token()
+tokens: list[Token] = []
+while (token := lexer.next_token()).type != TokenType.EOF: 
+    tokens.append(token)
+
+parser: Parser = Parser(tokens)
 
 ast = ModuleStatement(block=Block())
 while parser.peek() != Token.EOF(): # check if there is still a token, which means there is still a statement to be parsed
     ast.block.add(parser.parse_statement())
-

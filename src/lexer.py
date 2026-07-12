@@ -27,20 +27,20 @@ class Lexer():
     def store_token_position(self): 
         self.temp_token_row = self.row
         self.temp_token_col = self.col
-    def EOF(self) -> bool: 
+    def EOF(self): 
         return self.i >= len(self.code)
-    def peek(self) -> str: 
-        return self.code[self.i]
+    def peek(self) -> str|None: 
+        return self.code[self.i] if not self.EOF else None
     def advance(self) -> None: 
         self.i+=1
         self.col+=1
     def advance_line(self) -> None: 
         self.row+=1
         self.col=1
-    def make_token(self, type: TokenType, value: str|None): 
+    def make_token(self, type: TokenType, value: str|None) -> Token: 
         return Token(type, value, self.temp_token_row, self.temp_token_col)
     def next_token(self) -> Token: 
-        if self.i >= len(self.code): return self.make_token(TokenType.EOF, None)
+        if self.EOF(): return self.make_token(TokenType.EOF, None)
 
         c: str = ' '
 
@@ -57,6 +57,7 @@ class Lexer():
                 self.advance()
 
                 if (c := self.peek()) == '/': 
+                    # havent taken into account new line to end the comment or for the entire file
                     self.advance()
                     while self.i < len(self.code) and (c := self.peek()) != '\n': self.advance()
                     self.advance()
@@ -68,6 +69,7 @@ class Lexer():
             break
 
         if c in "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ": 
+            self.store_token_position()
             word: str = c
             self.advance()
             while (c := self.peek()) in "0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ":
@@ -78,146 +80,125 @@ class Lexer():
                 case "else": return self.make_token(TokenType.KEYWORD_ELSE, None)
                 case "while": return self.make_token(TokenType.KEYWORD_WHILE, None)
                 case "break": return self.make_token(TokenType.KEYWORD_BREAK, None)
+                # fn, return, continue, extern
 
                 case "int": return self.make_token(TokenType.DATATYPE_INT, None)
                 case "bool": return self.make_token(TokenType.DATATYPE_BOOL, None)
 
-                case "true": return self.make_token(TokenType.LITERAL_BOOL, )
-            
-            if name in ["fn", "if", "else", "while", "return", "break", "continue", "extern"]: return make_token(TokenType.)Token(T_TYPES.KEYWORD, name)
-            elif name in ["int", "bool"]: return Token(T_TYPES.DATATYPE, name)
-            elif name in ["true", "false"]: return Token(T_TYPES.LITERAL, name, datatype="bool")
-            return Token(T_TYPES.IDENTIFIER, name)
+                case "true": return self.make_token(TokenType.LITERAL_BOOL_TRUE, None)
+                case "false": return self.make_token(TokenType.LITERAL_BOOL_FALSE, None)
 
+            return self.make_token(TokenType.IDENTIFIER, word)
 
+        if c in "0123456789": # i dont care about floats anymore
+            self.store_token_position()
+            number = c
+            while (c := self.peek()) in "0123456789":
+                number += c
+                self.advance()
+            return self.make_token(TokenType.LITERAL_INT, number)
 
+        match c: 
+            case '+': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.ADD, None)
+            case '-': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.SUB, None)
+            case '*': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.MUL, None)
+            case '%': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.MOD, None)
 
+            case '&': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.AND, None)
+            case '?': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.OR, None)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        match char := self.advance(): 
-            case "": return Token.EOF()
-            case "+":
-                if self.peek() == "+": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "++")
-                elif self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "+=")
-                return Token(T_TYPES.OPERATOR, "+") # None because eof, or next char is not compatable
-            
-            case "-":
-                if self.peek() == "-": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "--")
-                elif self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "-=")
-                return Token(T_TYPES.OPERATOR, "-")
-            
-            case "*": 
-                if self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "*=")
-                return Token(T_TYPES.OPERATOR, "*")
-                
-            case "/": 
-                if self.peek() == "/": 
-                    self.advance()                     
-                    while self.peek() not in ["\n", None]: self.advance()
-                elif self.peek() == "*": 
-                    self.advance()
-                    while True: 
-                        assert not self.EOF(), "started to do a multi-line comment, but ended because eof"
-                        if self.advance() == "*" and self.advance() == "/": break
-                        # can eat everything in its path because it must end in those two characters
-                        #, and we don't care about what the comment actually says
-                elif self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "/=")
-                return Token(T_TYPES.OPERATOR, "/")
-            
-            case "%": 
-                if self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "%=")
-                return Token(T_TYPES.OPERATOR, "%")
-
-            case "<": 
-                if self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "<=")
-                return Token(T_TYPES.OPERATOR, "<")
-            
-            case ">": 
-                if self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, ">=")
-                return Token(T_TYPES.OPERATOR, ">")
-
-            case "&": 
-                if self.peek() == "?": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "&?")
-                return Token(T_TYPES.OPERATOR, "&")
-
-            case "?": return Token(T_TYPES.OPERATOR, "?")
-
-            case "!": 
-                if self.peek() == "!": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "!!")
-                elif self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "!=")
-                return Token(T_TYPES.OPERATOR, "!")
-
-            case "~": 
-                if self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "~=")
-                return Token(T_TYPES.OPERATOR, "~")
-
-            case "=": 
-                if self.peek() == "=": 
-                    self.advance()
-                    return Token(T_TYPES.OPERATOR, "==")
-                return Token(T_TYPES.OPERATOR, "=")
-
-            case ";": return Token(T_TYPES.DELIMITER, ";")
-            case ",": return Token(T_TYPES.DELIMITER, ",")
+            # blockers: function, while, if-else, dictionary, struct
+            # blocker -> creates blocks / block makers
+            case '{': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.L_BRACKET, None)
+            case '}': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.R_BRACKET, None)
 
             # paren has expression grouper and function caller and function arger and possibly arrayer
             # expression grouper, function args grouper(func call too), possibly array
-            case "(": return Token(T_TYPES.DELIMITER, "(")
-            case ")": return Token(T_TYPES.DELIMITER, ")")
-            # squares have list-maker (accessor is using :, not [])
-            # also int[64], 
-            case "[": return Token(T_TYPES.DELIMITER, "[")
-            case "]": return Token(T_TYPES.DELIMITER, "]")
-            # blockers: function, while, if-else, dictionary, struct
-            # blocker -> creates blocks / block makers
-            case "{": return Token(T_TYPES.DELIMITER, "{")
-            case "}": return Token(T_TYPES.DELIMITER, "}")
+            case '(': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.L_PAREN, None)
+            case ')': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.R_PAREN, None)
+            
+            case ';': 
+                self.store_token_position()
+                self.advance()
+                return self.make_token(TokenType.SEMICOLON, None)
+            
+            case '<': 
+                self.store_token_position()
+                self.advance()
+                if (c := self.peek()) == '=': 
+                    self.advance()
+                    return self.make_token(TokenType.LESS_THAN_OR_EQUAL_TO, None)
+                return self.make_token(TokenType.LESS_THAN, None)
 
-            case ".": raise Exception("NotImplementedError(used to be member access, but i scraped that)")
+            case '>': 
+                self.store_token_position()
+                self.advance()
+                if (c := self.peek()) == '=': 
+                    self.advance()
+                    return self.make_token(TokenType.GREATER_THAN_OR_EQUAL_TO, None)
+                return self.make_token(TokenType.GREATER_THAN, None)
 
-            case "\n" | "\t" | " ": return self.next_token()
+            case '!': 
+                self.store_token_position()
+                self.advance()
+                if (c := self.peek()) == '=': 
+                    self.advance()
+                    return self.make_token(TokenType.NOT_EQUAL_TO, None)
+                return self.make_token(TokenType.NOT, None)
 
-            case "\"": 
+            case '=': 
+                self.store_token_position()
+                self.advance()
+                if (c := self.peek()) == '=': 
+                    self.advance()
+                    return self.make_token(TokenType.EQUAL_TO, None)
+                return self.make_token(TokenType.ASSIGNER, None)
+
+        raise Exception("IllegalCharError: " + repr(c) + " row: " + self.row + " col: " + self.col)
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""case "\"": 
                 string = ""
                 while (char := self.advance()) != "\"":
                     if char != "\\": string += char
@@ -251,31 +232,30 @@ class Lexer():
                     case _: character += char
                 assert not self.EOF(), "UnterminatedCharLiteral"
                 assert self.advance() == "\'", "CharTooLong"
-                return Token(T_TYPES.LITERAL, character, "char")
-            
-            case "\\": raise Exception("Unexpected backslash outside of a string or char")
+                return Token(T_TYPES.LITERAL, character, "char")"""
+
+"""case "\\": raise Exception("Unexpected backslash outside of a string or char")
             case "#": raise Exception("NotImplementedError(dereference operator, but i dont want to deal with it right now)")
             case "@": raise Exception("NotImplementedError(address-of operator, but i dont want to deal with it right now)")
 
             case "$": raise Exception("NotImplementedError(idk what to do about ts right now)")
             case "^": raise Exception("NotImplementedError(idk what to do about ts right now)")
             case "`": raise Exception("NotImplementedError(idk what to do about ts right now)")
-            case ":": raise Exception("NotImplementedError(i think this is going to be used in dictionaries, and in function named parameters)")
+            case ":": raise Exception("NotImplementedError(i think this is going to be used in dictionaries, and in function named parameters)")"""
 
-            case _: 
-                if char in "0123456789": # i dont care about floats anymore
-                    number = char
-                    while True:
-                        char = self.peek()
-                        if char not in "0123456789": break # None because eof or some other character
-                        number += self.advance()
-                    return Token(T_TYPES.LITERAL, number, datatype="int")
-                elif char in "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ": # name = keyword+identifier
-                    # identifiers (variables, functions), keywords, literal:bools
-                    name = char
-                    while self.peek() in "0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ": name += self.advance()
-                    if name in ["fn", "if", "else", "while", "return", "break", "continue", "extern"]: return Token(T_TYPES.KEYWORD, name)
-                    elif name in ["int", "bool"]: return Token(T_TYPES.DATATYPE, name)
-                    elif name in ["true", "false"]: return Token(T_TYPES.LITERAL, name, datatype="bool")
-                    return Token(T_TYPES.IDENTIFIER, name)
-                raise Exception("IllegalCharError: " + repr(char))
+"""case ",": return Token(T_TYPES.DELIMITER, ",")"""
+
+"""# squares have list-maker (accessor is using :, not [])
+            # also int[64], 
+            case "[": return Token(T_TYPES.DELIMITER, "[")
+            case "]": return Token(T_TYPES.DELIMITER, "]")"""
+
+"""case ".": raise Exception("NotImplementedError(used to be member access, but i scraped that)")"""
+
+"""for strings: 
+
+            case "~": 
+                if self.peek() == "=": 
+                    self.advance()
+                    return Token(T_TYPES.OPERATOR, "~=")
+                return Token(T_TYPES.OPERATOR, "~")"""

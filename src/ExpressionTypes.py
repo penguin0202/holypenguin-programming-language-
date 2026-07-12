@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from lexer import Token
 
 @dataclass
 class LiteralExpression(): 
@@ -32,6 +33,11 @@ class BinaryAssignmentExpression():
     operator: str
     variable: "Expression"
     value: "Expression"
+
+@dataclass
+class AssignmentExpression(): 
+    lvalue: "Expression"
+    rvalue: "Expression"
 
 @dataclass
 class BinaryExprExpression(): 
