@@ -15,7 +15,9 @@ class Position():
     row: int = 1
     col: int = 1
     def __str__(self):
-        return f"row: {self.row}, col: {self.col}"
+        return f"(row: {self.row}, col: {self.col})"
+    def __repr__(self): 
+        return self.__str__()
 
 @dataclass
 class Token: 
@@ -24,6 +26,8 @@ class Token:
     position: Position
     def __str__(self):
         return f"type: {self.type.name}, value: {self.value}, position: {self.position}"
+    def __repr__(self): 
+        return self.__str__()
 
 @dataclass
 class Lexer(): 

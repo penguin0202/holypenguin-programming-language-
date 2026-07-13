@@ -2,7 +2,7 @@ from lexer import Token, Position
 from TOKEN_TYPES import *
 from StatementTypes import *
 from ExpressionTypes import *
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from copy import copy
 
 # there is not variable_initialization function because that would require context
@@ -67,20 +67,16 @@ class Block():
     def code(self): 
         return self._code
 
+@dataclass
 class Parser(): 
-    def __init__(self, tokens) -> None: 
-        self.tokens:list[Token] = tokens
-        self.i:int = 0
-        self.e_pos = Position()
-        self.s_pos = Position()
-        """self.e_row = 1
-        self.e_col = 1 # expression row
-        self.s_row = 1
-        self.s_col = 1 # statement column"""
+    tokens: list[Token] # inputted
+    i: int = 0
+    e_pos: Position = field(default_factory=Position) # expression start position
+    s_pos: Position = field(default_factory=Position) # statement start position
     def EOT(self): return self.i >= len(self.tokens)
     def peek(self) -> Token: return self.tokens[self.i] if self.tokens else Token.EOF()
     def advance(self) -> Token: self.i+=1
-    def match(self, t: Token, expected_tokentype: TokenType, error_location): 
+    def ensure(self, t: Token, expected_tokentype: TokenType, error_location): 
         # error location: expression_statement, if_Statement, expression inside int var declaration, while_Statement, while, etc
         if t.type != expected_tokentype: 
             raise Exception(f"Expected {expected_tokentype.name} in {error_location} @ {t.position}; got {t.type.name} instead")
@@ -135,9 +131,10 @@ class Parser():
             if precedence < min_precedence: break # forgot what this does
 
             if t.type == TokenType.ASSIGNER: 
-                assert allow_assignment, "AssignmentInExpression"
+                if not allow_assignment: raise Exception(f"AssignmentInExpression @ {left.position}")
                 self.advance()
                 right = self.parse_expression(precedence+1)
+                
                 # consume semicolon
                 left = AssignmentExpression(left, right)
             elif t.type in [TokenType.ADD, TokenType.SUB, TokenType.MUL, TokenType.DIV, TokenType.MOD
