@@ -16,6 +16,7 @@ class TokenType(Enum):
     DATATYPE_INT = auto(),
     DATATYPE_BOOL = auto(),
 
+    LITERAL_BOOL = auto()
     LITERAL_BOOL_TRUE = auto(),
     LITERAL_BOOL_FALSE = auto()
     LITERAL_INT = auto(),

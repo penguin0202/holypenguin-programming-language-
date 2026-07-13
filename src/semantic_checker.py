@@ -1,40 +1,20 @@
 from lexer import *
 from parser import *
 from SymbolTypes import *
+from enum import Enum
 
-class FunctionContext(): 
-    def __init__(self): 
-        self.context: list[FnSignature] = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
-    def enter_function(self, fn_signature: FnSignature): 
-        self.context.append(fn_signature)
-    def exit_function(self) -> FnSignature: 
-        assert self.is_in_function(), "no function present"
-        return self.context.pop(-1)
-    def is_in_function(self) -> bool: 
-        return len(self.context) > 0
-    def current_function(self): 
-        assert self.is_in_function(), "no function present"
-        return self.context[-1]
-functions: FunctionContext = FunctionContext()
-
-class LoopContext(): 
-    def __init__(self): 
-        self.counter = 0
-    def enter_one(self): 
-        self.counter+=1
-    def exit_one(self): 
-        assert self.counter > 0, "How the hell can you exit a loop when there isn't one"
-        self.counter-=1
-    def is_in_one(self) -> bool: 
-        return self.counter > 0
-loops: LoopContext = LoopContext()
+class DATATYPE(Enum): 
+    INTEGER = auto()
+    BOOLEAN = auto()
 
 class Scope(): 
     def __init__(self, parent_id): 
-        self.symbols: dict = {}
+        self.symbols: dict[str, DATATYPE] = {}
         self.parent_id = parent_id
     def symbol_exists(self, name) -> bool: 
         return name in self.symbols.keys()
+    def add_var(self, name, datatype: DATATYPE): 
+        self.symbols[name] = datatype
 
 class SymbolTable(): 
     def __init__(self): 
@@ -54,32 +34,7 @@ class SymbolTable():
         self.scopes[self.current_id].symbols[name] = VarSymbol(datatype)
         # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
     
-    def add_function_symbol(self, fn_signature: FnSignature) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
-        # check duplicate parameter names
-        seen_names: list[str] = []
-        for name in fn_signature.param_names: 
-            assert name not in seen_names, f"duplicate parameter '{name}'"
-            seen_names.append(name)
-
-        if self.scopes[self.current_id].symbol_exists(fn_signature.name): 
-            # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
-            fn = self.scopes[self.current_id].symbols[fn_signature.name]
-            assert isinstance(fn, FnSymbol), "symbol already exists not as a function"
-
-            # generate, from all keys inside the "set" of the function, a list containing all existing param lists
-            # no conflicts, good job david *pats head*
-
-            for overload in fn.overloads: 
-                assert fn_signature.param_datatypes != overload.datatypes, "duplicate function signature, where datatypes coincide"
-
-            # if code executes here, it means both of the following
-            # 1. the new param_datatypes don't coincide with existing ones
-            # 2. names dont coincide
-            # btw, the checking of the return types is handled by the function context
-            fn.add_overload(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
-
-        else: # if no function set already exists, create new one!
-            self.scopes[self.current_id].symbols[fn_signature.name] = FnSymbol(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns) # btw, return values can be different across the sets (duh)
+    
 
     # check if expression (not the datatype of it) is assignable
     # variables
@@ -121,41 +76,15 @@ class SymbolTable():
         
         return self.lookup_symbol(name, self.scopes[id].parent_id)
 
-    def expression_datatype(self, expression: Expression) -> str | None: # None possibly, because of assignments, i dont know what to return from them
+    def expression_datatype(self, expression: Expression) -> DATATYPE: # None possibly, because of assignments, i dont know what to return from them
         # also handles assignment; the parser already checked that expressions can have - 
         # at most 1 assignment, and its position is going to be in expr_stmnt s
         match expression: 
-            case LiteralExpression(datatype, value):
-                return datatype
+            case IntLiteralExpression(): 
+                return DATATYPE.INTEGER
 
-            case FnCallExpression(name, args): # {"type": "fn_call", "name": left, "args": parse_function_arguments()}
-                # check if function exists
-                # then check if parameters are correct-o
-                # name = expression["name"]["value"] # im not sure about the ["value"] placement
-                # if not symbol_exists(name): error("Function undeclared")
-                # fn = assert_function(lookup_symbol(name), "eh... calling a non-function as a function much?")
-                # grab datatypes from arguments
-                # check if parameters work
-                # given_datatypes = []
-                # for exp in expression["args"]: 
-                #    given_datatypes.append(expression_datatype(exp))
-                # given_datatypes = tuple(given_datatypes)
-                # now, given_datatypes is a list of strings, each string represents its corresponding -
-                # argument's resulting datatype
-
-                # existing_datatypes_S = fn["set"].keys()
-                # if given_datatypes not in existing_datatypes_S: error(f"function '{fn} does not have '{given_datatypes}' as a function signature parameters?")
-
-                # i assumey-sume that if block executes to this line, it means that every has gone smoothly ->
-                # function exists, and the datatypes of the arguments match one of the 
-                # possible list of datatypes inside the set of the function
-                # i think i just have ot return the datatype of the function now!!!! yay im so proud of you!!! :)
-                # return fn["set"][given_datatypes]["returns"]
-
-                # ignoring named arguments because WHY THE FUCK DID YOU THINK I CAN DO THIS TAIWANGA
-                # then, get the datatypes of given parameters
-                # use that to get the return inside the set of a function
-                pass
+            case IdentifierExpression(t): 
+                if not self.symbol_exists(name): raise Exception("Asdasdsadsda")
 
             case IdentifierExpression(name): 
                 assert self.symbol_exists(name), "Undeclared Variable"
@@ -164,76 +93,48 @@ class SymbolTable():
                 return variable["datatype"]
             
             case NegateExpression(operand):
-                assert self.expression_datatype(operand) == "int"
-                return "int" # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
+                operand_datatype = self.expression_datatype(operand)
+                if operand_datatype != DATATYPE.INTEGER: 
+                    raise Exception("Expected an integer value")
+                return DATATYPE.INTEGER # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
             
             case NotExpression(operand):
-                assert self.expression_datatype(operand) == "bool"
-                return "bool"
+                operand_datatype = self.expression_datatype(operand)
+                if operand_datatype != DATATYPE.BOOLEAN: 
+                    raise Exception("Expected a boolean value")
+                return DATATYPE.BOOLEAN
             
-            case UnaryAssignmentExpression(operator, variable):
-                assert self.is_lvalue(variable), "must be lvalue"
-                vt = self.expression_datatype(variable)
-                match operator:
-                    case "!!": assert vt == "bool"
-                    case "++" | "--": assert vt == "int"
-
-            case BinaryAssignmentExpression(operator, lvalue, rvalue): # "=" | "+=" | "-=" | "*=" | "/=" | "%=": 
-                assert self.is_lvalue(lvalue), "must be lvalue" # from now on, lvalues are already checked for actual lvalue
-                lt = self.expression_datatype(lvalue)
-                rt = self.expression_datatype(rvalue)
-                match operator: 
-                    case "=": 
-                        # check l-value
-                        # (the symbol of the variable (can be member_access) is already gotten using expression_datatype (function returns variable's datatype, is stored in val_datatype))
-                        # check ^ datatype -- is it the same as val_datatype (done below)
-                        # if expression_datatype(lvalue) != expression_datatype(rvalue): error(f"datatyps not compatable in variable assigning: expected '{lvalue_datatype}', got '{rvalue_datatype}'")
-                        # i am not toooo sure about assigning 1 to a float variable, maybe i could promote it
-                        # same with char into a string variable
-                        assert lt == rt
-                    
-                    case "+=" | "-=" | "*=" | "/=" | "%=": 
-                        # lvalue must be int or float
-                        # if lvalue has a datatype of integer, then the rvalues can only result to an integer, because i cannot assign floats to an int
-                        # if rvalue is a float though, then rvalue is anything goes, by anything goes i mean numerical thingies
-
-                        assert lt == "int"
-                        assert rt == "int"
-
-                        # variable must be float type, because this is true division that results in floats every time, even if it's 6/2
-                        # catch phrase is "as accurately as possible, while guranteeing uniformity"
-
             case BinaryExprExpression(operator, left, right):
                 lt = self.expression_datatype(left)
                 rt = self.expression_datatype(right)
 
-                match operator: 
-                    case "==" | "!=":
-                        return "bool" # dont need to check types?
-
-                    case "&" | "?" | "&?": 
-                        assert lt == "bool"
-                        assert rt == "bool"
-                        return "bool"
-                    
-                    case "<" | ">" | "<=" | ">=": 
-                        assert lt == "int"
-                        assert rt == "int"
-                        return "bool"
-                    
-                    case "+" | "-" | "*" | "/" | "%": 
-                        assert lt == "int"
-                        assert rt == "int"
-                        return "int"
-                    
-                    # this is true division, so result will always be a float, even if it's 6 / 2, itll result in 3.0
-                    # for integer division, we can make it an operator, or just a function (for "a INT_DIV b", itll result in "toInt(a / b)")
-                    # toInt will either round towards 0, or to negative Infinity idkyet, make separate functions
-                    # good job thinking of solutions!
-                    # to be consistent, division will always result in floats, but inputs can be any num
-
-                    # modulo/remainder must have integer inputs (and integer output ofc too)
-                    # modulo or remainder question unanswered
+                if operator in [TokenType.EQUAL_TO, TokenType.NOT_EQUAL_TO]: 
+                    return DATATYPE.BOOLEAN # don't need to check types?
+                
+                if operator in [TokenType.AND, TokenType.OR]: 
+                    if lt != DATATYPE.BOOLEAN:
+                        raise Exception("Expected boolean value")
+                    if rt != DATATYPE.BOOLEAN: 
+                        raise Exception("Expected bool value")
+                    return DATATYPE.BOOLEAN
+                
+                if operator in [TokenType.LESS_THAN, TokenType.LESS_THAN_OR_EQUAL_TO, TokenType.GREATER_THAN, TokenType.GREATER_THAN_OR_EQUAL_TO]:
+                    if lt != DATATYPE.INTEGER:
+                        raise Exception("Expected integer value")
+                    if rt != DATATYPE.INTEGER: 
+                        raise Exception("Expected integer value")
+                    return DATATYPE.BOOLEAN
+                
+                if operator in [TokenType.ADD, TokenType.SUB, TokenType.MUL, TokenType.DIV, TokenType.MOD]: 
+                    if lt != DATATYPE.INTEGER:
+                        raise Exception("Expected integer value")
+                    if rt != DATATYPE.INTEGER: 
+                        raise Exception("Expected integer value")
+                    return DATATYPE.INTEGER
+                
+                raise Exception("literally how")
+            
+        raise Exception("Waht kind of sick expression is this ya bum")
 
     # will modify statements (aka, the ast) in-place
     def analyze_statements(self, statements: list[Statement], parent_id) -> None: 
@@ -251,32 +152,16 @@ class SymbolTable():
                 scope_id = self.push_scope(parent_id)
                 self.analyze_statements(block.code, scope_id)
                 self.leave_scope()
-
-            case VarDeclStatement(name, datatype):
+            
+            case IntVarDeclStatement(name, datatype): 
+                self.add_variable_symbol(name, datatype)
+            
+            case BoolVarDeclStatement(name, datatype): 
                 self.add_variable_symbol(name, datatype)
 
             case BlockStatement(block):
                 scope_id = self.push_scope(parent_id)
                 self.analyze_statements(block.code, scope_id)
-                self.leave_scope()
-
-            case FnDeclStatement(fn_signature, block):
-                self.add_function_symbol(fn_signature)
-
-                scope_id = self.push_scope(parent_id)
-                functions.enter_function(fn_signature)
-
-                # add parameters into the function (same 'pool' as the local variables)
-                for name, datatype in zip(fn_signature.param_names, fn_signature.param_datatypes): 
-                    self.add_variable_symbol(name, datatype)
-
-                self.analyze_statements(block.code, scope_id)
-                # add parameters into that scope -> make them appear initialized
-                # elaborating on my previous comment, after i have all done you know, scope issues, i will move on to - 
-                # solving uninitialized issues, where every variable (and function if i allow undefined functions that has a signature) - 
-                # will have an additional flag called "initialized". Every initialization will start with this flag being false. -
-                # In the case of parameters, the flag will be set to true because it techinically will be *actually initilized* when it's used
-                functions.exit_function()
                 self.leave_scope()
 
             case IfStatement(condition, block): 
@@ -314,25 +199,183 @@ class SymbolTable():
                 loops.exit_one()
                 self.leave_scope()
 
-            case ReturnStatement(value):
+            case BreakStatement(): assert loops.is_in_one(), "break statements can only be used inside loops"
+                
+            case ExpressionStatement(expression):
+                self.expression_datatype(expression) # i dont need the type, i just need it to check validity
+
+push_scope(-1)
+analyze_statements(statements)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""case FnDeclStatement(fn_signature, block):
+                self.add_function_symbol(fn_signature)
+
+                scope_id = self.push_scope(parent_id)
+                functions.enter_function(fn_signature)
+
+                # add parameters into the function (same 'pool' as the local variables)
+                for name, datatype in zip(fn_signature.param_names, fn_signature.param_datatypes): 
+                    self.add_variable_symbol(name, datatype)
+
+                self.analyze_statements(block.code, scope_id)
+                # add parameters into that scope -> make them appear initialized
+                # elaborating on my previous comment, after i have all done you know, scope issues, i will move on to - 
+                # solving uninitialized issues, where every variable (and function if i allow undefined functions that has a signature) - 
+                # will have an additional flag called "initialized". Every initialization will start with this flag being false. -
+                # In the case of parameters, the flag will be set to true because it techinically will be *actually initilized* when it's used
+                functions.exit_function()
+                self.leave_scope()"""
+
+"""            case ReturnStatement(value):
                 # no void functions :sad:
                 assert functions.is_in_function(), "return EXPRESSION statements can only be used inside functions!" # though i dont know what I am currently in
 
                 # expected type is the type the function, that the return statement here lives in, is supposed to return
                 fn: FnSignature = functions.current_function()
 
-                assert self.expression_datatype(value) == fn.returns, f"Cannot return the datatype '{value}' from function '{fn.name}', because it is supposed to return '{fn.returns}'"
+                assert self.expression_datatype(value) == fn.returns, f"Cannot return the datatype '{value}' from function '{fn.name}', because it is supposed to return '{fn.returns}'""""
 
-            case ContinueStatement(): assert loops.is_in_one(), "continue statements can only be used inside loops"
-            case BreakStatement(): assert loops.is_in_one(), "break statements can only be used inside loops"
-                
-            case ExternFnStatement(fn_signature):
+"""case ContinueStatement(): assert loops.is_in_one(), "continue statements can only be used inside loops""""
+
+"""case ExternFnStatement(fn_signature):
                 # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
                 self.add_function_symbol(fn_signature)
-                # congrats, love
-            
-            case ExpressionStatement(expression):
-                self.expression_datatype(expression) # i dont need the type, i just need it to check validity
+                # congrats, love"""
 
-push_scope(-1)
-analyze_statements(statements)
+"""class FunctionContext(): 
+    def __init__(self): 
+        self.context: list[FnSignature] = [] # it is a stack instead of just a global bit flag because you need the return datatype later on for every single inner function
+    def enter_function(self, fn_signature: FnSignature): 
+        self.context.append(fn_signature)
+    def exit_function(self) -> FnSignature: 
+        assert self.is_in_function(), "no function present"
+        return self.context.pop(-1)
+    def is_in_function(self) -> bool: 
+        return len(self.context) > 0
+    def current_function(self): 
+        assert self.is_in_function(), "no function present"
+        return self.context[-1]
+functions: FunctionContext = FunctionContext()"""
+
+"""class LoopContext(): 
+    def __init__(self): 
+        self.counter = 0
+    def enter_one(self): 
+        self.counter+=1
+    def exit_one(self): 
+        assert self.counter > 0, "How the hell can you exit a loop when there isn't one"
+        self.counter-=1
+    def is_in_one(self) -> bool: 
+        return self.counter > 0
+loops: LoopContext = LoopContext()"""
+
+
+"""case FnCallExpression(name, args): # {"type": "fn_call", "name": left, "args": parse_function_arguments()}
+                # check if function exists
+                # then check if parameters are correct-o
+                # name = expression["name"]["value"] # im not sure about the ["value"] placement
+                # if not symbol_exists(name): error("Function undeclared")
+                # fn = assert_function(lookup_symbol(name), "eh... calling a non-function as a function much?")
+                # grab datatypes from arguments
+                # check if parameters work
+                # given_datatypes = []
+                # for exp in expression["args"]: 
+                #    given_datatypes.append(expression_datatype(exp))
+                # given_datatypes = tuple(given_datatypes)
+                # now, given_datatypes is a list of strings, each string represents its corresponding -
+                # argument's resulting datatype
+
+                # existing_datatypes_S = fn["set"].keys()
+                # if given_datatypes not in existing_datatypes_S: error(f"function '{fn} does not have '{given_datatypes}' as a function signature parameters?")
+
+                # i assumey-sume that if block executes to this line, it means that every has gone smoothly ->
+                # function exists, and the datatypes of the arguments match one of the 
+                # possible list of datatypes inside the set of the function
+                # i think i just have ot return the datatype of the function now!!!! yay im so proud of you!!! :)
+                # return fn["set"][given_datatypes]["returns"]
+
+                # ignoring named arguments because WHY THE FUCK DID YOU THINK I CAN DO THIS TAIWANGA
+                # then, get the datatypes of given parameters
+                # use that to get the return inside the set of a function
+                pass"""
+
+"""case UnaryAssignmentExpression(operator, variable):
+                assert self.is_lvalue(variable), "must be lvalue"
+                vt = self.expression_datatype(variable)
+                match operator:
+                    case "!!": assert vt == "bool"
+                    case "++" | "--": assert vt == "int"""
+
+"""case BinaryAssignmentExpression(operator, lvalue, rvalue): # "=" | "+=" | "-=" | "*=" | "/=" | "%=": 
+                assert self.is_lvalue(lvalue), "must be lvalue" # from now on, lvalues are already checked for actual lvalue
+                lt = self.expression_datatype(lvalue)
+                rt = self.expression_datatype(rvalue)
+                match operator: 
+                    case "=": 
+                        # check l-value
+                        # (the symbol of the variable (can be member_access) is already gotten using expression_datatype (function returns variable's datatype, is stored in val_datatype))
+                        # check ^ datatype -- is it the same as val_datatype (done below)
+                        # if expression_datatype(lvalue) != expression_datatype(rvalue): error(f"datatyps not compatable in variable assigning: expected '{lvalue_datatype}', got '{rvalue_datatype}'")
+                        # i am not toooo sure about assigning 1 to a float variable, maybe i could promote it
+                        # same with char into a string variable
+                        assert lt == rt
+                    
+                    case "+=" | "-=" | "*=" | "/=" | "%=": 
+                        # lvalue must be int or float
+                        # if lvalue has a datatype of integer, then the rvalues can only result to an integer, because i cannot assign floats to an int
+                        # if rvalue is a float though, then rvalue is anything goes, by anything goes i mean numerical thingies
+
+                        assert lt == "int"
+                        assert rt == "int"
+
+                        # variable must be float type, because this is true division that results in floats every time, even if it's 6/2
+                        # catch phrase is "as accurately as possible, while guranteeing uniformity"""
+
+"""def add_function_symbol(self, fn_signature: FnSignature) -> None: # {'type': 'fn_decl', "returns": datatype, 'name': name, 'args': parameters, "block": parse_block()}
+        # check duplicate parameter names
+        seen_names: list[str] = []
+        for name in fn_signature.param_names: 
+            assert name not in seen_names, f"duplicate parameter '{name}'"
+            seen_names.append(name)
+
+        if self.scopes[self.current_id].symbol_exists(fn_signature.name): 
+            # if name is a symbol that exists, but is not a function, then we can't "overload" a variable
+            fn = self.scopes[self.current_id].symbols[fn_signature.name]
+            assert isinstance(fn, FnSymbol), "symbol already exists not as a function"
+
+            # generate, from all keys inside the "set" of the function, a list containing all existing param lists
+            # no conflicts, good job david *pats head*
+
+            for overload in fn.overloads: 
+                assert fn_signature.param_datatypes != overload.datatypes, "duplicate function signature, where datatypes coincide"
+
+            # if code executes here, it means both of the following
+            # 1. the new param_datatypes don't coincide with existing ones
+            # 2. names dont coincide
+            # btw, the checking of the return types is handled by the function context
+            fn.add_overload(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns)
+
+        else: # if no function set already exists, create new one!
+            self.scopes[self.current_id].symbols[fn_signature.name] = FnSymbol(fn_signature.param_datatypes, fn_signature.param_names, fn_signature.returns) # btw, return values can be different across the sets (duh)"""
+
+                    # this is true division, so result will always be a float, even if it's 6 / 2, itll result in 3.0
+                    # for integer division, we can make it an operator, or just a function (for "a INT_DIV b", itll result in "toInt(a / b)")
+                    # toInt will either round towards 0, or to negative Infinity idkyet, make separate functions
+                    # good job thinking of solutions!
+                    # to be consistent, division will always result in floats, but inputs can be any num
+
+                    # modulo/remainder must have integer inputs (and integer output ofc too)
+                    # modulo or remainder question unanswered

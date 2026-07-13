@@ -1,8 +1,9 @@
-from lexer import Token
+from lexer import Token, Position
 from TOKEN_TYPES import *
 from StatementTypes import *
 from ExpressionTypes import *
 from dataclasses import dataclass
+from copy import copy
 
 # there is not variable_initialization function because that would require context
 
@@ -28,7 +29,7 @@ PRECEDENCE = {
     TokenType.DIV: 6,
     TokenType.MOD: 6, 
 
-    TokenType.L_PAREN: 100,
+    #TokenType.L_PAREN: 100, function call is an operator
 }
 
 """    "+=": 1,
@@ -66,77 +67,65 @@ class Block():
     def code(self): 
         return self._code
 
-@dataclass
-class FnSignature(): 
-    name: str
-    returns: str
-    param_names: list[str]
-    param_datatypes: list[str]
-
 class Parser(): 
     def __init__(self, tokens) -> None: 
         self.tokens:list[Token] = tokens
         self.i:int = 0
-    def EOT(self): 
-        return self.i >= len(self.tokens)
+        self.e_pos = Position()
+        self.s_pos = Position()
+        """self.e_row = 1
+        self.e_col = 1 # expression row
+        self.s_row = 1
+        self.s_col = 1 # statement column"""
+    def EOT(self): return self.i >= len(self.tokens)
     def peek(self) -> Token: return self.tokens[self.i] if self.tokens else Token.EOF()
-    def match(self, type) -> bool: return self.peek().type == type
-    def match(self, type, value) -> bool: 
-        token = self.peek()
-        if token.type != type: return False
-        return token.value == value
-    def advance(self) -> Token: 
-        token = self.peek()
-        self.i+=1
-        return token
-    def advance(self, type) -> Token:
-        token = self.peek()
-        assert token.type == type, "Expected type: " + type
-        self.i+=1
-        return token
-    def advance(self, type, value) -> Token:
-        token = self.peek()
-        assert token.type == type, "Expected type: " + type
-        assert token.value == value, "Expected value: " + value
-        self.i+=1
-        return token
+    def advance(self) -> Token: self.i+=1
+    def match(self, t: Token, expected_tokentype: TokenType, error_location): 
+        # error location: expression_statement, if_Statement, expression inside int var declaration, while_Statement, while, etc
+        if t.type != expected_tokentype: 
+            raise Exception(f"Expected {expected_tokentype.name} in {error_location} @ {t.position}; got {t.type.name} instead")
+    """def store_expression_position(self, t: Token): 
+        self.e_row, self.e_col = t.row, t.col
+    def store_statement_position(self, t: Token): 
+        self.s_row, self.s_col = t.row, t.col"""
+
+    def parse_atom(self) -> Expression:
+        assert not self.EOT(), "Expected value, instead EOF"
+        t = self.peek()
+        self.e_pos = copy(t.position)
+        
+        if t.type == TokenType.LITERAL_INT: 
+            self.advance()
+            return IntLiteralExpression(t.value, self.e_pos)
+        
+        if t.type == TokenType.LITERAL_BOOL: 
+            self.advance()
+            return BoolLiteralExpression(t.value, self.e_pos)
+        
+        if t.type == TokenType.IDENTIFIER: 
+            self.advance()
+            return IdentifierExpression(t.value, self.e_pos)
+        
+        if t.type == TokenType.SUB: 
+            self.advance()
+            inner_atom = self.parse_atom()
+            return NegateExpression(inner_atom, self.e_pos)
+        
+        if t.type == TokenType.NOT: 
+            self.advance()
+            inner_atom = self.parse_atom()
+            return NotExpression(inner_atom, self.e_pos)
+
+        if t.type == TokenType.L_PAREN: 
+            self.advance()
+            inner_expression = self.parse_expression()
+            # consume RPAREN
+            return inner_expression
+
+        raise Exception(f"Unexpected token for parse_atom: {t} @ {self.e_pos}")
     
     def parse_expression(self, min_precedence=0, allow_assignment=False) -> Expression: 
-        def parse_atom() -> Expression:
-            assert not self.EOT(), "Expected value, instead EOF"
-            t = self.peek()
-            
-            if t.type == TokenType.LITERAL_INT: 
-                self.advance()
-                return LiteralExpression(t)
-            
-            if t.type == TokenType.LITERAL_BOOL_TRUE or t.type == TokenType.LITERAL_BOOL_FALSE: 
-                self.advance()
-                return LiteralExpression(t)
-            
-            if t.type == TokenType.IDENTIFIER: 
-                self.advance()
-                return IdentifierExpression(t)
-            
-            if t.type == TokenType.SUB: 
-                self.advance()
-                inner_atom = parse_atom()
-                return NegateExpression(inner_atom)
-            
-            if t.type == TokenType.NOT: 
-                self.advance()
-                inner_atom = parse_atom()
-                return NotExpression(inner_atom)
-
-            if t.type == TokenType.L_PAREN: 
-                self.advance()
-                inner_expression = self.parse_expression()
-                # consume RPAREN
-                return inner_expression
-
-            raise Exception(f"Unexpected token for parse_atom: {t}")
-
-        left = parse_atom()
+        left = self.parse_atom()
 
         while not self.EOT(): 
             t = self.peek() # t must be an operator from now on
@@ -144,18 +133,111 @@ class Parser():
             if t.type not in PRECEDENCE.keys(): break # for example, if you get a "}" here, this will eject
             precedence = PRECEDENCE.get(t.type, -1) # im thinking of doing if precedence == -1, eject (same as above), but Ill sleep on it
             if precedence < min_precedence: break # forgot what this does
-            self.advance()
 
             if t.type == TokenType.ASSIGNER: 
                 assert allow_assignment, "AssignmentInExpression"
                 self.advance()
-                right = self.parse_expression()
+                right = self.parse_expression(precedence+1)
                 # consume semicolon
                 left = AssignmentExpression(left, right)
+            elif t.type in [TokenType.ADD, TokenType.SUB, TokenType.MUL, TokenType.DIV, TokenType.MOD
+                          , TokenType.OR, TokenType.AND, TokenType.EQUAL_TO, TokenType.NOT_EQUAL_TO
+                          , TokenType.LESS_THAN, TokenType.GREATER_THAN, TokenType.LESS_THAN_OR_EQUAL_TO, TokenType.GREATER_THAN_OR_EQUAL_TO]: 
+                self.advance()
+                right = self.parse_expression(precedence+1)
+                left = BinaryExprExpression(t, left, right)
+
+        return left
+
+    def parse_block(self) -> Block: 
+        block: Block = Block()
+        while not self.EOT(): 
+            if self.match(T_TYPES.DELIMITER, "}"): break
+            block.add(self.parse_statement())
+            assert not self.EOT(), "Expected } (eof)"
+        self.advance(T_TYPES.DELIMITER, "}")
+        return block
+
+    def parse_statement(self) -> Statement: 
+        if self.EOT(): return EOFStatement()
+
+        t: Token = self.peek()
+
+        if t.type == TokenType.DATATYPE_INT: 
+            self.advance()
+            if (t := self.peek()).type == TokenType.IDENTIFIER: 
+                variable_name = copy(t)
+                self.advance()
+                if (t := self.peek()).type == TokenType.SEMICOLON: 
+                    self.advance()
+                    return IntVarDeclStatement(variable_name)
+                return Exception("Expected semicolon") # +row+col
+            return Exception("Expected identifier") # + row and column information
+        
+        if t.type == TokenType.DATATYPE_BOOL: 
+            self.advance()
+            if (t := self.peek()).type == TokenType.IDENTIFIER: 
+                variable_name = copy(t)
+                self.advance()
+                if (t := self.peek()).type == TokenType.SEMICOLON: 
+                    self.advance()
+                    return BoolVarDeclStatement(variable_name)
+                return Exception("Expected semicolon") # +row+col
+            return Exception("Expected identifier") # + row and column information
+
+        if t.type == TokenType.L_BRACKET: 
+            self.advance()
+            return BlockStatement(self.parse_block())
+        
+        if t.type == TokenType.KEYWORD_IF: 
+            self.advance()
+            # consume LPAREN -- yep I'm doing this
+            if_condition = self.parse_expression() # make sure checking for expressions ignore the RPAREN if not paired with a LPAREN
+            # consume RPAREN
+            if_statement = self.parse_statement() # peek() will not return the next free token
+            if (t := self.peek()).type == TokenType.KEYWORD_ELSE: 
+                self.advance()
+                else_statement = self.parse_statement()
+                return IfElseStatement(if_condition, if_statement, else_statement)
+            return IfStatement(if_condition, if_statement)
+
+        if t.type == TokenType.KEYWORD_WHILE: 
+            self.advance()
+            if (t := self.peek()).type == TokenType.L_PAREN: 
+                self.advance()
+                if (t := self.peek()).type == TokenType.R_PAREN: 
+                    self.advance()
+                    while_condition = self.parse_expression()
+                    # consume RPAREN
+                    while_statement = self.parse_statement()
+                    return WhileStatement(while_condition, while_statement)
+                raise Exception("wanted RPAREN in this while statement") # r, c
+            raise Exception("Wanted LPAREN in this while statement") #r, c
+
+        if t.type == TokenType.KEYWORD_BREAK: 
+            self.advance()
+            if (t := self.peek()).type == TokenType.SEMICOLON: 
+                self.advance()
+                return BreakStatement()
+            raise Exception("wanted semicolon") #rowcol
+        
+        expression_statement = self.parse_expression(allow_assignment=True)
+        if (t := self.peek()).type == TokenType.SEMICOLON: 
+            self.advance()
+            return ExpressionStatement(expression_statement)
+        raise Exception("expected semicolon in expression_Statement") #rc
+        
 
 
 
-            op_tok: Token = self.peek()
+
+
+
+
+
+
+
+"""op_tok: Token = self.peek()
             if op_tok.type != T_TYPES.OPERATOR: break # must be an operator or some sort, not an identifier or whatnot
             operator = op_tok.value
             if operator not in PRECEDENCE.keys(): break
@@ -185,84 +267,7 @@ class Parser():
                     left = BinaryAssignmentExpression(operator, left, self.parse_expression(precedence+1))
                 # operator for appending lists?
                 case _: 
-                    left = BinaryExprExpression(operator, left, self.parse_expression(precedence+1))
-
-        return left
-
-    def parse_block(self) -> Block: 
-        block: Block = Block()
-        while not self.EOT(): 
-            if self.match(T_TYPES.DELIMITER, "}"): break
-            block.add(self.parse_statement())
-            assert not self.EOT(), "Expected } (eof)"
-        self.advance(T_TYPES.DELIMITER, "}")
-        return block
-
-    def parse_statement(self) -> Statement: 
-        assert not self.EOT(), "eof, want statement"
-
-        t: Token = self.peek()
-
-        if t.type == TokenType.DATATYPE_INT: 
-            self.advance()
-            if (t := self.peek()).type == TokenType.IDENTIFIER: 
-                variable_name = t
-                self.advance()
-                if (t := self.peek()).type == TokenType.ASSIGNER: 
-                    self.advance()
-                    if (t := self.peek()).type == TokenType.LITERAL_INT: 
-                        integer_value = t
-                        self.advance()
-                        # consume semicolon & advance
-                        return LI
-
-            # consume singular identifier
-            # consume equals sign
-            # consume integer value
-            # consume semicolon
-        
-        if t.type == TokenType.DATATYPE_BOOL: 
-            self.advance()
-            # consume singular identifier
-            # consume equals sign
-            # consume integer value
-            # consume semicolon
-
-        if t.type == TokenType.L_BRACKET: 
-            self.advance() # {
-            return BlockStatement(self.parse_block())
-        
-        if t.type == TokenType.KEYWORD_IF: 
-            self.advance()
-            # consume LPAREN -- yep I'm doing this
-            if_condition = self.parse_expression() # make sure checking for expressions ignore the RPAREN if not paired with a LPAREN
-            # consume RPAREN
-            if_statement = self.parse_statement() # peek() will not return the next free token
-            if (t := self.peek()).type == TokenType.KEYWORD_ELSE: 
-                self.advance()
-                else_statement = self.parse_statement()
-                return IfElseStatement(if_condition, if_statement, else_statement)
-            return IfStatement(if_condition, if_statement)
-
-        if t.type == TokenType.KEYWORD_WHILE: 
-            self.advance()
-            # consume LPAREN
-            while_condition = self.parse_expression()
-            # consume RPAREN
-            while_statement = self.parse_statement()
-            return WhileStatement(while_condition, while_statement)
-
-        if t.type == TokenType.KEYWORD_BREAK: 
-            self.advance()
-            # consume semicolon
-            return BreakStatement()
-        
-        expression_statement = self.parse_expression(allow_assignment=True)
-        # consume semicolon (advance first tho)
-        return ExpressionStatement(expression_statement)
-
-
-
+                    left = BinaryExprExpression(operator, left, self.parse_expression(precedence+1))"""
 
 """    def parse_fn_signature(self) -> FnSignature: 
         datatype: Token = self.advance(T_TYPES.DATATYPE)
@@ -314,3 +319,17 @@ else:
     expr: Expression = self.parse_expression(allow_assignment=True)
     self.advance(T_TYPES.DELIMITER, ";")
     return ExpressionStatement(expr)"""
+
+""" for initialization if want to add this
+            if (t := self.peek()).type == TokenType.ASSIGNER: 
+                    self.advance()
+                    if (t := self.peek()).type == TokenType.LITERAL_INT: 
+                        integer_value = copy(t)
+                        self.advance()"""
+
+"""@dataclass
+class FnSignature(): 
+    name: str
+    returns: str
+    param_names: list[str]
+    param_datatypes: list[str]"""

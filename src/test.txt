@@ -12,11 +12,11 @@ side-effect of assinging 5 to the addrss of x
 
 1+1
 
-+1, 1
++1 1
 
 1+1
 
-first thing + operator + second thing operatees?
+first thing + operator + second thing operatees
 
 
 fn int doThis() {

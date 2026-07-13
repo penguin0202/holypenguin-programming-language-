@@ -1,29 +1,54 @@
 from dataclasses import dataclass
-from lexer import Token
+from lexer import Token, TokenType
+from parser import Position
 
 @dataclass
-class LiteralExpression(): 
-    datatype: str
-    value: str
+class IntLiteralExpression(): 
+    int_literal: str
+    position: Position
+    
+@dataclass
+class BoolLiteralExpression(): 
+    t: Token
+    position: Position
 
 @dataclass
 class IdentifierExpression(): 
-    name: str
+    t: Token
+    position: Position
 
 @dataclass
 class NegateExpression(): 
     operand: "Expression"
+    position: Position
 
 @dataclass
 class NotExpression(): 
     operand: "Expression"
+    position: Position
 
 @dataclass
+class AssignmentExpression(): 
+    lvalue: "Expression"
+    rvalue: "Expression"
+    position: Position
+
+@dataclass
+class BinaryExprExpression(): 
+    operator: TokenType
+    left: "Expression"
+    right: "Expression"
+    position: Position
+
+Expression = IntLiteralExpression | BoolLiteralExpression | IdentifierExpression | NegateExpression | NotExpression | AssignmentExpression \
+    | BinaryExprExpression
+
+"""@dataclass
 class FnCallExpression(): 
     name: "Expression"
-    args: list["Expression"]
+    args: list["Expression"]"""
 
-@dataclass
+"""@dataclass
 class UnaryAssignmentExpression(): 
     operator: str
     variable: "Expression"
@@ -32,18 +57,4 @@ class UnaryAssignmentExpression():
 class BinaryAssignmentExpression(): 
     operator: str
     variable: "Expression"
-    value: "Expression"
-
-@dataclass
-class AssignmentExpression(): 
-    lvalue: "Expression"
-    rvalue: "Expression"
-
-@dataclass
-class BinaryExprExpression(): 
-    operator: str
-    left: "Expression"
-    right: "Expression"
-
-Expression = LiteralExpression | IdentifierExpression | NegateExpression | NotExpression | FnCallExpression\
-    | UnaryAssignmentExpression | BinaryAssignmentExpression | BinaryExprExpression
+    value: "Expression"""

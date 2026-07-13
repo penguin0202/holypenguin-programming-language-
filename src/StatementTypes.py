@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from parser import Expression, Block, FnSignature
+from lexer import Token
 
 @dataclass
 class ModuleStatement(): 
@@ -10,46 +11,36 @@ class BlockStatement():
     block: Block
 
 @dataclass
-class VarDeclStatement(): 
-    name: str
-    datatype: str
+class EOFStatement(): 
+    pass
 
 @dataclass
-class FnDeclStatement(): 
-    fn_signature: FnSignature
-    block: Block
+class IntVarDeclStatement(): 
+    name: Token
 
 @dataclass
-class ExternFnStatement(): 
-    fn_signature: FnSignature
-
+class BoolVarDeclStatement(): 
+    name: Token
+    
 @dataclass
 class BreakStatement(): 
     pass
 
 @dataclass
-class ContinueStatement(): 
-    pass
-
-@dataclass
-class ReturnStatement(): 
-    value: Expression
-
-@dataclass
 class WhileStatement(): 
     condition: Expression
-    block: Block
+    statement: "Statement"
 
 @dataclass
 class IfElseStatement(): 
     condition: Expression
-    then_block: Block
-    else_block: Block
+    if_statement: "Statement"
+    else_statement: "Statement"
 
 @dataclass
 class IfStatement(): 
     condition: Expression
-    block: Block
+    statement: "Statement"
 
 @dataclass
 class ExpressionStatement(): 
@@ -58,3 +49,20 @@ class ExpressionStatement():
 Statement = BlockStatement | VarDeclStatement | FnDeclStatement | ExternFnStatement\
     | BreakStatement | ContinueStatement | ReturnStatement | WhileStatement | IfElseStatement\
     | ExpressionStatement | ModuleStatement | IfStatement
+
+"""@dataclass
+class FnDeclStatement(): 
+    fn_signature: FnSignature
+    block: Block
+
+@dataclass
+class ExternFnStatement(): 
+    fn_signature: FnSignature"""
+
+"""@dataclass
+class ContinueStatement(): 
+    pass"""
+
+"""@dataclass
+class ReturnStatement(): 
+    value: Expression"""

@@ -1,7 +1,8 @@
 from json_funcs import write_to_json
 import os
 from TOKEN_TYPES import *
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from copy import copy
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = os.path.join(SCRIPT_DIR, "test.txt")
@@ -10,35 +11,40 @@ OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
 # I am not caring about tab size right now regarding position tracking
 
 @dataclass
+class Position(): 
+    row: int = 1
+    col: int = 1
+    def __str__(self):
+        return f"row: {self.row}, col: {self.col}"
+
+@dataclass
 class Token: 
     type: TokenType
     value: str|None
-    row: int
-    col: int
+    position: Position
+    def __str__(self):
+        return f"type: {self.type.name}, value: {self.value}, position: {self.position}"
 
+@dataclass
 class Lexer(): 
-    def __init__(self, code: str) -> None: 
-        self.code: str = code
-        self.i: int = 0
-        self.row = 1
-        self.col = 1
-        self.temp_token_row = 1
-        self.temp_token_col = 1
+    code: str # inputted
+    i: int = 0
+    position: Position = field(default_factory=Position)
+    temp_token_position: Position = field(default_factory=Position)
     def store_token_position(self): 
-        self.temp_token_row = self.row
-        self.temp_token_col = self.col
+        self.temp_token_position = copy(self.position)
     def EOF(self): 
         return self.i >= len(self.code)
     def peek(self) -> str|None: 
-        return self.code[self.i] if not self.EOF else None
+        return self.code[self.i] if not self.EOF() else None
     def advance(self) -> None: 
         self.i+=1
-        self.col+=1
+        self.position.col+=1
     def advance_line(self) -> None: 
-        self.row+=1
-        self.col=1
+        self.position.col=1
+        self.position.row+=1
     def make_token(self, type: TokenType, value: str|None) -> Token: 
-        return Token(type, value, self.temp_token_row, self.temp_token_col)
+        return Token(type, value, copy(self.temp_token_position))
     def next_token(self) -> Token: 
         if self.EOF(): return self.make_token(TokenType.EOF, None)
 
@@ -51,6 +57,7 @@ class Lexer():
                 continue
             if c == '\n': 
                 self.advance()
+                self.advance_line()
                 continue
             if c == '/': 
                 self.store_token_position()
@@ -85,8 +92,8 @@ class Lexer():
                 case "int": return self.make_token(TokenType.DATATYPE_INT, None)
                 case "bool": return self.make_token(TokenType.DATATYPE_BOOL, None)
 
-                case "true": return self.make_token(TokenType.LITERAL_BOOL_TRUE, None)
-                case "false": return self.make_token(TokenType.LITERAL_BOOL_FALSE, None)
+                case "true": return self.make_token(TokenType.LITERAL_BOOL, "true")
+                case "false": return self.make_token(TokenType.LITERAL_BOOL, "false")
 
             return self.make_token(TokenType.IDENTIFIER, word)
 
@@ -184,7 +191,7 @@ class Lexer():
                     return self.make_token(TokenType.EQUAL_TO, None)
                 return self.make_token(TokenType.ASSIGNER, None)
 
-        raise Exception("IllegalCharError: " + repr(c) + " row: " + self.row + " col: " + self.col)
+        raise Exception(f"IllegalCharError: {repr(c)} @ {self.position}")
 
 
 
