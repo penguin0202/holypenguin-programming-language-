@@ -1,28 +1,11 @@
-fn int x() {
-    y();
-}
+a = 6;
 
-if (x==5) {
+67;
 
-}
-
-x=5;
-
-side-effect of assinging 5 to the addrss of x
-
-1+1
-
-+1 1
-
-1+1
-
-first thing + operator + second thing operatees
-
-
-fn int doThis() {
+while (5) {
     
 }
 
-if (z==5) {
-    doThis();
+if (5 + 5) {
+    b_;
 }

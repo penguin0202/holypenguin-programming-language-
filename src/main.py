@@ -1,6 +1,6 @@
 # this is where I will combine the lexer, parser, semantic analyzer, CFG-IR? thingies
 from lexer import *
-#from parser import *
+from parser import Parser, EOFStatement, BlockStatement
 #import semantic_checker
 import os
 from pprint import pprint
@@ -19,7 +19,22 @@ tokens: list[Token] = []
 while (token := lexer.next_token()).type != TokenType.EOF: 
     tokens.append(token)
 
-pprint(tokens, indent=4)
+#pprint(tokens, indent=4)
+
+parser = Parser(tokens)
+
+ast = BlockStatement({}, [], None)
+while not isinstance(statement := parser.parse_statement(), EOFStatement): 
+    ast.code.append(statement)
+
+pprint(ast, indent=1)
+
+
+
+
+
+
+
 
 """parser = Parser(tokens)
 

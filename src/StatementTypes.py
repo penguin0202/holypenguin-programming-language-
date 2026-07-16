@@ -1,14 +1,13 @@
 from dataclasses import dataclass
-from parser import Expression, Block, FnSignature
-from lexer import Token
-
-@dataclass
-class ModuleStatement(): 
-    block: Block
+from ExpressionTypes import Expression
+from lexer import Token, Position
+from datatypes import DATATYPE
 
 @dataclass
 class BlockStatement(): 
-    block: Block
+    symbol_table: dict[str, DATATYPE]
+    code: list["Statement"]
+    position: Position
 
 @dataclass
 class EOFStatement(): 
@@ -17,38 +16,43 @@ class EOFStatement():
 @dataclass
 class IntVarDeclStatement(): 
     name: Token
+    position: Position
 
 @dataclass
 class BoolVarDeclStatement(): 
     name: Token
+    position: Position
     
 @dataclass
 class BreakStatement(): 
-    pass
+    position: Position
 
 @dataclass
 class WhileStatement(): 
     condition: Expression
     statement: "Statement"
+    position: Position
 
 @dataclass
 class IfElseStatement(): 
     condition: Expression
     if_statement: "Statement"
     else_statement: "Statement"
+    position: Position
 
 @dataclass
 class IfStatement(): 
     condition: Expression
     statement: "Statement"
+    position: Position
 
 @dataclass
 class ExpressionStatement(): 
     expression: Expression
+    position: Position
 
-Statement = BlockStatement | VarDeclStatement | FnDeclStatement | ExternFnStatement\
-    | BreakStatement | ContinueStatement | ReturnStatement | WhileStatement | IfElseStatement\
-    | ExpressionStatement | ModuleStatement | IfStatement
+Statement = BlockStatement | EOFStatement | IntVarDeclStatement | BoolVarDeclStatement \
+    | BreakStatement | WhileStatement | IfElseStatement | IfStatement | ExpressionStatement
 
 """@dataclass
 class FnDeclStatement(): 

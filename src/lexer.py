@@ -1,12 +1,6 @@
-from json_funcs import write_to_json
-import os
 from TOKEN_TYPES import *
 from dataclasses import dataclass, field
 from copy import copy
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INPUT_FILENAME = os.path.join(SCRIPT_DIR, "test.txt")
-OUTPUT_FILENAME = os.path.join(SCRIPT_DIR, "lexed.txt")
 
 # I am not caring about tab size right now regarding position tracking
 
@@ -51,9 +45,7 @@ class Lexer():
         return Token(type, value, copy(self.temp_token_position))
     def next_token(self) -> Token: 
         if self.EOF(): return self.make_token(TokenType.EOF, None)
-
         c: str = ' '
-
         while self.i < len(self.code): 
             c = self.peek()
             if c == ' ': 
@@ -104,6 +96,7 @@ class Lexer():
         if c in "0123456789": # i dont care about floats anymore
             self.store_token_position()
             number = c
+            self.advance()
             while (c := self.peek()) in "0123456789":
                 number += c
                 self.advance()
@@ -195,7 +188,7 @@ class Lexer():
                     return self.make_token(TokenType.EQUAL_TO, None)
                 return self.make_token(TokenType.ASSIGNER, None)
 
-        raise Exception(f"IllegalCharError: {repr(c)} @ {self.position}")
+        raise SystemExit(f"IllegalCharError: {repr(c)} @ {self.position}")
 
 
 
@@ -215,44 +208,44 @@ class Lexer():
                     if char != "\\": string += char
                     else: 
                         match char := self.advance(): 
-                            case "": raise Exception("UnterminatedStringLiteral")
+                            case "": raise SystemExit("UnterminatedStringLiteral")
                             case "n": string += "\n"
                             case "t": string += "\t"
                             case "\\": string += "\\"
                             case "\"": string += "\""
                             case "\'": string += "\'"
                             # case "u" -> unicode: "\u2890"
-                            case _: raise Exception("InvalidEscapeSequence")
+                            case _: raise SystemExit("InvalidEscapeSequence")
                 return Token(T_TYPES.LITERAL, string, "str")
 
             case "\'": 
                 character = ""
                 match char := self.advance(): 
-                    case "": raise Exception("UnterminatedCharLiteral")
-                    case "\'": raise Exception("EmptyCharLiteral")
+                    case "": raise SystemExit("UnterminatedCharLiteral")
+                    case "\'": raise SystemExit("EmptyCharLiteral")
                     case "\\": 
                         match char := self.advance():
-                            case "": raise Exception("escape sequence started in a char, but eof (both escape sequence terminated, and char terminated because end ' not found)")
+                            case "": raise SystemExit("escape sequence started in a char, but eof (both escape sequence terminated, and char terminated because end ' not found)")
                             case "n": character += "\n"
                             case "t": character += "\t"
                             case "\\": character += "\\"
                             case "\"": character += "\""
                             case "\'": character += "\'"
                             # case "u" -> unicode: "\u2890"
-                            case _: raise Exception("T_TYPES.INVALIDEscapeSequence")
+                            case _: raise SystemExit("T_TYPES.INVALIDEscapeSequence")
                     case _: character += char
                 assert not self.EOF(), "UnterminatedCharLiteral"
                 assert self.advance() == "\'", "CharTooLong"
                 return Token(T_TYPES.LITERAL, character, "char")"""
 
-"""case "\\": raise Exception("Unexpected backslash outside of a string or char")
-            case "#": raise Exception("NotImplementedError(dereference operator, but i dont want to deal with it right now)")
-            case "@": raise Exception("NotImplementedError(address-of operator, but i dont want to deal with it right now)")
+"""case "\\": raise SystemExit("Unexpected backslash outside of a string or char")
+            case "#": raise SystemExit("NotImplementedError(dereference operator, but i dont want to deal with it right now)")
+            case "@": raise SystemExit("NotImplementedError(address-of operator, but i dont want to deal with it right now)")
 
-            case "$": raise Exception("NotImplementedError(idk what to do about ts right now)")
-            case "^": raise Exception("NotImplementedError(idk what to do about ts right now)")
-            case "`": raise Exception("NotImplementedError(idk what to do about ts right now)")
-            case ":": raise Exception("NotImplementedError(i think this is going to be used in dictionaries, and in function named parameters)")"""
+            case "$": raise SystemExit("NotImplementedError(idk what to do about ts right now)")
+            case "^": raise SystemExit("NotImplementedError(idk what to do about ts right now)")
+            case "`": raise SystemExit("NotImplementedError(idk what to do about ts right now)")
+            case ":": raise SystemExit("NotImplementedError(i think this is going to be used in dictionaries, and in function named parameters)")"""
 
 """case ",": return Token(T_TYPES.DELIMITER, ",")"""
 

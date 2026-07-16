@@ -2,10 +2,20 @@ from lexer import *
 from parser import *
 from SymbolTypes import *
 from enum import Enum
+from datatypes import DATATYPE
+from StatementTypes import Statement
 
-class DATATYPE(Enum): 
-    INTEGER = auto()
-    BOOLEAN = auto()
+class LoopContext(): 
+    def __init__(self): 
+        self.counter = 0
+    def enter_one(self): 
+        self.counter+=1
+    def exit_one(self): 
+        assert self.counter > 0, "How the hell can you exit a loop when there isn't one"
+        self.counter-=1
+    def is_in_one(self) -> bool: 
+        return self.counter > 0
+loops: LoopContext = LoopContext()
 
 class Scope(): 
     def __init__(self, parent_id): 
@@ -80,7 +90,7 @@ class SymbolTable():
         # also handles assignment; the parser already checked that expressions can have - 
         # at most 1 assignment, and its position is going to be in expr_stmnt s
         match expression: 
-            case IntLiteralExpression(): 
+            case IntLiteralExpression(_, pos): 
                 return DATATYPE.INTEGER
 
             case IdentifierExpression(t): 
@@ -143,11 +153,6 @@ class SymbolTable():
 
     def analyze_statement(self, statement: Statement, parent_id) -> None: 
         match statement: 
-            case ModuleStatement(block): 
-                scope_id = self.push_scope(parent_id)
-                self.analyze_statements(block.code, scope_id)
-                self.leave_scope()
-
             case IfStatement(condition, block): 
                 scope_id = self.push_scope(parent_id)
                 self.analyze_statements(block.code, scope_id)
@@ -203,11 +208,6 @@ class SymbolTable():
                 
             case ExpressionStatement(expression):
                 self.expression_datatype(expression) # i dont need the type, i just need it to check validity
-
-push_scope(-1)
-analyze_statements(statements)
-
-
 
 
 
@@ -270,17 +270,7 @@ analyze_statements(statements)
         return self.context[-1]
 functions: FunctionContext = FunctionContext()"""
 
-"""class LoopContext(): 
-    def __init__(self): 
-        self.counter = 0
-    def enter_one(self): 
-        self.counter+=1
-    def exit_one(self): 
-        assert self.counter > 0, "How the hell can you exit a loop when there isn't one"
-        self.counter-=1
-    def is_in_one(self) -> bool: 
-        return self.counter > 0
-loops: LoopContext = LoopContext()"""
+
 
 
 """case FnCallExpression(name, args): # {"type": "fn_call", "name": left, "args": parse_function_arguments()}

@@ -9,12 +9,12 @@ class IntLiteralExpression():
     
 @dataclass
 class BoolLiteralExpression(): 
-    t: Token
+    bool_literal: str
     position: Position
 
 @dataclass
 class IdentifierExpression(): 
-    t: Token
+    name: str
     position: Position
 
 @dataclass

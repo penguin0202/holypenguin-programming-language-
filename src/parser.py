@@ -54,18 +54,7 @@ PRECEDENCE = {
     
     """
     
-class Block(): 
-    def __init__(self): 
-        self._symbol_table = None
-        self._code: list[Statement] = []
-    def add(self, statement:Statement): 
-        self._code.append(statement)
-    @property
-    def symbol_table(self): 
-        return self._symbol_table
-    @property
-    def code(self): 
-        return self._code
+
 
 @dataclass
 class Parser(): 
@@ -74,12 +63,17 @@ class Parser():
     e_pos: Position = field(default_factory=Position) # expression start position
     s_pos: Position = field(default_factory=Position) # statement start position
     def EOT(self): return self.i >= len(self.tokens)
-    def peek(self) -> Token: return self.tokens[self.i] if self.tokens else Token.EOF()
+    def peek(self) -> Token: return Token(TokenType.EOF, None, Position(-1, -1)) if self.EOT() else self.tokens[self.i]
     def advance(self) -> Token: self.i+=1
-    def ensure(self, t: Token, expected_tokentype: TokenType, error_location): 
+    def ensure(self, t: Token, expected_tokentype: TokenType, error_location: str): 
         # error location: expression_statement, if_Statement, expression inside int var declaration, while_Statement, while, etc
         if t.type != expected_tokentype: 
-            raise Exception(f"Expected {expected_tokentype.name} in {error_location} @ {t.position}; got {t.type.name} instead")
+            raise SystemExit(f"Expected {expected_tokentype.name} in {error_location} @ {t.position}; got {t.type.name} instead")
+    def consume(self, expected_tokentype: TokenType, error_location: str): 
+        if (t := self.peek()).type != expected_tokentype: 
+            raise SystemExit(f"Expected {expected_tokentype.name} in {error_location} @ {t.position}; got {t.type.name} instead")
+        self.advance()
+    
     """def store_expression_position(self, t: Token): 
         self.e_row, self.e_col = t.row, t.col
     def store_statement_position(self, t: Token): 
@@ -115,13 +109,15 @@ class Parser():
         if t.type == TokenType.L_PAREN: 
             self.advance()
             inner_expression = self.parse_expression()
+            self.consume(TokenType.R_PAREN, "parenthe-sized expression needs r_paren to end")
             # consume RPAREN
             return inner_expression
 
-        raise Exception(f"Unexpected token for parse_atom: {t} @ {self.e_pos}")
+        raise SystemExit(f"Unexpected token for parse_atom: {t} @ {self.e_pos}")
     
     def parse_expression(self, min_precedence=0, allow_assignment=False) -> Expression: 
         left = self.parse_atom()
+        self.e_pos = copy(left.position)
 
         while not self.EOT(): 
             t = self.peek() # t must be an operator from now on
@@ -131,98 +127,80 @@ class Parser():
             if precedence < min_precedence: break # forgot what this does
 
             if t.type == TokenType.ASSIGNER: 
-                if not allow_assignment: raise Exception(f"AssignmentInExpression @ {left.position}")
+                if not allow_assignment: raise SystemExit(f"AssignmentInExpression @ {left.position}")
                 self.advance()
                 right = self.parse_expression(precedence+1)
-                
-                # consume semicolon
-                left = AssignmentExpression(left, right)
+                left = AssignmentExpression(left, right, self.e_pos)
             elif t.type in [TokenType.ADD, TokenType.SUB, TokenType.MUL, TokenType.DIV, TokenType.MOD
                           , TokenType.OR, TokenType.AND, TokenType.EQUAL_TO, TokenType.NOT_EQUAL_TO
                           , TokenType.LESS_THAN, TokenType.GREATER_THAN, TokenType.LESS_THAN_OR_EQUAL_TO, TokenType.GREATER_THAN_OR_EQUAL_TO]: 
                 self.advance()
                 right = self.parse_expression(precedence+1)
-                left = BinaryExprExpression(t, left, right)
+                left = BinaryExprExpression(t.type, left, right, self.e_pos)
 
         return left
 
-    def parse_block(self) -> Block: 
-        block: Block = Block()
-        while not self.EOT(): 
-            if self.match(T_TYPES.DELIMITER, "}"): break
-            block.add(self.parse_statement())
-            assert not self.EOT(), "Expected } (eof)"
-        self.advance(T_TYPES.DELIMITER, "}")
-        return block
-
     def parse_statement(self) -> Statement: 
         if self.EOT(): return EOFStatement()
-
         t: Token = self.peek()
+        self.s_pos = t.position
 
         if t.type == TokenType.DATATYPE_INT: 
             self.advance()
-            if (t := self.peek()).type == TokenType.IDENTIFIER: 
-                variable_name = copy(t)
-                self.advance()
-                if (t := self.peek()).type == TokenType.SEMICOLON: 
-                    self.advance()
-                    return IntVarDeclStatement(variable_name)
-                return Exception("Expected semicolon") # +row+col
-            return Exception("Expected identifier") # + row and column information
+            self.ensure(t := self.peek(), TokenType.IDENTIFIER, "Integer variable declaration variable name")
+            variable_name = copy(t)
+            self.advance()
+            self.consume(TokenType.SEMICOLON, "end int var decl with semicolon; liek everything else")
+            return IntVarDeclStatement(variable_name, self.s_pos)
         
         if t.type == TokenType.DATATYPE_BOOL: 
             self.advance()
-            if (t := self.peek()).type == TokenType.IDENTIFIER: 
-                variable_name = copy(t)
-                self.advance()
-                if (t := self.peek()).type == TokenType.SEMICOLON: 
-                    self.advance()
-                    return BoolVarDeclStatement(variable_name)
-                return Exception("Expected semicolon") # +row+col
-            return Exception("Expected identifier") # + row and column information
+            self.ensure(t := self.peek(), TokenType.IDENTIFIER, "boolean variable declaration variable name")
+            variable_name = copy(t)
+            self.advance()
+            self.consume(TokenType.SEMICOLON, "end bool var decl with semicolon; liek everything else")
+            return BoolVarDeclStatement(variable_name, self.s_pos)
 
         if t.type == TokenType.L_BRACKET: 
             self.advance()
-            return BlockStatement(self.parse_block())
+            block = BlockStatement({}, [], self.s_pos)
+            while not self.EOT(): 
+                t = self.peek()
+                if t.type == TokenType.R_BRACKET: break
+                one_inner_statement = self.parse_statement()
+                block.code.append(one_inner_statement)
+            # here, either broken out early, or is EOT; I don't know the difference here, that's why I do this check at the end
+            self.consume(TokenType.R_BRACKET, "block statement")
+            return block
         
         if t.type == TokenType.KEYWORD_IF: 
             self.advance()
-            # consume LPAREN -- yep I'm doing this
+            self.consume(TokenType.L_PAREN, "if statement needs starting paren")
             if_condition = self.parse_expression() # make sure checking for expressions ignore the RPAREN if not paired with a LPAREN
-            # consume RPAREN
+            self.consume(TokenType.R_PAREN, "if statement needs ending paren in condition")
             if_statement = self.parse_statement() # peek() will not return the next free token
             if (t := self.peek()).type == TokenType.KEYWORD_ELSE: 
                 self.advance()
                 else_statement = self.parse_statement()
-                return IfElseStatement(if_condition, if_statement, else_statement)
-            return IfStatement(if_condition, if_statement)
+                return IfElseStatement(if_condition, if_statement, else_statement, self.s_pos)
+            return IfStatement(if_condition, if_statement, self.s_pos)
 
         if t.type == TokenType.KEYWORD_WHILE: 
             self.advance()
-            if (t := self.peek()).type == TokenType.L_PAREN: 
-                self.advance()
-                if (t := self.peek()).type == TokenType.R_PAREN: 
-                    self.advance()
-                    while_condition = self.parse_expression()
-                    # consume RPAREN
-                    while_statement = self.parse_statement()
-                    return WhileStatement(while_condition, while_statement)
-                raise Exception("wanted RPAREN in this while statement") # r, c
-            raise Exception("Wanted LPAREN in this while statement") #r, c
+            self.consume(TokenType.L_PAREN, "while statement condition")
+            while_condition = self.parse_expression()
+            self.consume(TokenType.R_PAREN, "while statement condition")
+            while_statement = self.parse_statement()
+            return WhileStatement(while_condition, while_statement, self.s_pos)
 
         if t.type == TokenType.KEYWORD_BREAK: 
             self.advance()
-            if (t := self.peek()).type == TokenType.SEMICOLON: 
-                self.advance()
-                return BreakStatement()
-            raise Exception("wanted semicolon") #rowcol
+            self.consume(TokenType.SEMICOLON, "break statement")
+            return BreakStatement(self.s_pos)
         
         expression_statement = self.parse_expression(allow_assignment=True)
-        if (t := self.peek()).type == TokenType.SEMICOLON: 
-            self.advance()
-            return ExpressionStatement(expression_statement)
-        raise Exception("expected semicolon in expression_Statement") #rc
+        self.consume(TokenType.SEMICOLON, "expression statement")
+        return ExpressionStatement(expression_statement, self.s_pos)
         
 
 
@@ -305,12 +283,12 @@ if t.type == T_TYPES.KEYWORD:
             self.advance(T_TYPES.KEYWORD, "fn")
             return ExternFnStatement(self.parse_fn_signature())
         case "continue": return ContinueStatement()
-        case "else": raise Exception("what is ts doing here dawg") # not a "top-level" statement starter, only can use in conjunction of if in front
+        case "else": raise SystemExit("what is ts doing here dawg") # not a "top-level" statement starter, only can use in conjunction of if in front
         case "return": 
             exp = self.parse_expression()
             self.advance(T_TYPES.DELIMITER, ";")
             return ReturnStatement(exp)
-    raise Exception("keyword not keyword, dev error")
+    raise SystemExit("keyword not keyword, dev error")
 else: 
     # allows function calls, and something like x + 5;, variable reassigning, disallows single semicolon, throws unexpected token instead inside the parse_atom func inside parse_expression
     expr: Expression = self.parse_expression(allow_assignment=True)
