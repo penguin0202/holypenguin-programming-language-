@@ -62,6 +62,9 @@ class Parser():
     i: int = 0
     e_pos: Position = field(default_factory=Position) # expression start position
     s_pos: Position = field(default_factory=Position) # statement start position
+
+
+
     def EOT(self): return self.i >= len(self.tokens)
     def peek(self) -> Token: return Token(TokenType.EOF, None, Position(-1, -1)) if self.EOT() else self.tokens[self.i]
     def advance(self) -> Token: self.i+=1
@@ -147,7 +150,8 @@ class Parser():
 
         if t.type == TokenType.DATATYPE_INT: 
             self.advance()
-            self.ensure(t := self.peek(), TokenType.IDENTIFIER, "Integer variable declaration variable name")
+            t = self.peek()
+            self.ensure(t, TokenType.IDENTIFIER, "Integer variable declaration variable name")
             variable_name = copy(t)
             self.advance()
             self.consume(TokenType.SEMICOLON, "end int var decl with semicolon; liek everything else")
@@ -155,7 +159,8 @@ class Parser():
         
         if t.type == TokenType.DATATYPE_BOOL: 
             self.advance()
-            self.ensure(t := self.peek(), TokenType.IDENTIFIER, "boolean variable declaration variable name")
+            t = self.peek()
+            self.ensure(t, TokenType.IDENTIFIER, "boolean variable declaration variable name")
             variable_name = copy(t)
             self.advance()
             self.consume(TokenType.SEMICOLON, "end bool var decl with semicolon; liek everything else")

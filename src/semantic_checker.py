@@ -86,12 +86,19 @@ class SymbolTable():
         
         return self.lookup_symbol(name, self.scopes[id].parent_id)
 
+    def ensure_datatype(self, given: DATATYPE, expected: DATATYPE, err_loc: str, position: Position) -> None: 
+        if given != expected: 
+            raise SystemExit(f"Expected {expected.value} value in {err_loc}, but got {given.value} instead: {position}")
+
     def expression_datatype(self, expression: Expression) -> DATATYPE: # None possibly, because of assignments, i dont know what to return from them
         # also handles assignment; the parser already checked that expressions can have - 
         # at most 1 assignment, and its position is going to be in expr_stmnt s
         match expression: 
-            case IntLiteralExpression(_, pos): 
+            case IntLiteralExpression(): 
                 return DATATYPE.INTEGER
+
+            case BoolLiteralExpression(): 
+                return DATATYPE.BOOLEAN
 
             case IdentifierExpression(t): 
                 if not self.symbol_exists(name): raise Exception("Asdasdsadsda")
@@ -102,11 +109,10 @@ class SymbolTable():
                 assert isinstance(variable, VarSymbol), "name referenced is not a variable, most likely its a function"
                 return variable["datatype"]
             
-            case NegateExpression(operand):
-                operand_datatype = self.expression_datatype(operand)
-                if operand_datatype != DATATYPE.INTEGER: 
+            case NegateExpression():
+                if self.expression_datatype(expression.operand) != DATATYPE.INTEGER: 
                     raise Exception("Expected an integer value")
-                return DATATYPE.INTEGER # return itself, and since itself is either going to be int or float (the assert helped us narrow it down), itll just..work
+                return DATATYPE.INTEGER
             
             case NotExpression(operand):
                 operand_datatype = self.expression_datatype(operand)
@@ -115,30 +121,32 @@ class SymbolTable():
                 return DATATYPE.BOOLEAN
             
             case BinaryExprExpression(operator, left, right):
-                lt = self.expression_datatype(left)
-                rt = self.expression_datatype(right)
+                left_datatype = self.expression_datatype(left)
+                right_datatype = self.expression_datatype(right)
 
                 if operator in [TokenType.EQUAL_TO, TokenType.NOT_EQUAL_TO]: 
                     return DATATYPE.BOOLEAN # don't need to check types?
                 
                 if operator in [TokenType.AND, TokenType.OR]: 
-                    if lt != DATATYPE.BOOLEAN:
+                    self.ensure_datatype(left_datatype, DATATYPE.BOOLEAN, "left operand of logical operator", expression.position)
+
+                    if left_datatype != DATATYPE.BOOLEAN:
                         raise Exception("Expected boolean value")
-                    if rt != DATATYPE.BOOLEAN: 
+                    if right_datatype != DATATYPE.BOOLEAN: 
                         raise Exception("Expected bool value")
                     return DATATYPE.BOOLEAN
                 
                 if operator in [TokenType.LESS_THAN, TokenType.LESS_THAN_OR_EQUAL_TO, TokenType.GREATER_THAN, TokenType.GREATER_THAN_OR_EQUAL_TO]:
-                    if lt != DATATYPE.INTEGER:
+                    if left_datatype != DATATYPE.INTEGER:
                         raise Exception("Expected integer value")
-                    if rt != DATATYPE.INTEGER: 
+                    if right_datatype != DATATYPE.INTEGER: 
                         raise Exception("Expected integer value")
                     return DATATYPE.BOOLEAN
                 
                 if operator in [TokenType.ADD, TokenType.SUB, TokenType.MUL, TokenType.DIV, TokenType.MOD]: 
-                    if lt != DATATYPE.INTEGER:
+                    if left_datatype != DATATYPE.INTEGER:
                         raise Exception("Expected integer value")
-                    if rt != DATATYPE.INTEGER: 
+                    if right_datatype != DATATYPE.INTEGER: 
                         raise Exception("Expected integer value")
                     return DATATYPE.INTEGER
                 
@@ -153,61 +161,64 @@ class SymbolTable():
 
     def analyze_statement(self, statement: Statement, parent_id) -> None: 
         match statement: 
-            case IfStatement(condition, block): 
-                scope_id = self.push_scope(parent_id)
-                self.analyze_statements(block.code, scope_id)
-                self.leave_scope()
-            
             case IntVarDeclStatement(name, datatype): 
                 self.add_variable_symbol(name, datatype)
             
             case BoolVarDeclStatement(name, datatype): 
                 self.add_variable_symbol(name, datatype)
 
-            case BlockStatement(block):
+            case BlockStatement():
                 scope_id = self.push_scope(parent_id)
-                self.analyze_statements(block.code, scope_id)
+                self.analyze_statements(statement.code, scope_id)
                 self.leave_scope()
 
-            case IfStatement(condition, block): 
+            case IfStatement(): 
                 # no need to have a context/stack/a single global (bit) flag for a selection statement
                 # because there isnt anything you cant do outside
                 # of an if block you can only do inside an if block (e.g. while loops have break and continue
                 # ; and functions have return statements)
-                assert self.expression_datatype(condition) == "bool"
+                condition_datatype = self.expression_datatype(statement.condition)
+                if condition_datatype != DATATYPE.BOOLEAN:
+                    raise SystemExit("Expected BOOLEAN value in if statement condition, but got " + condition_datatype.value + " instead. " + statement.position)
 
                 scope_id = self.push_scope(parent_id)
-                self.analyze_statements(block.code, scope_id)
+                self.analyze_statements(statement.statement, scope_id)
                 self.leave_scope()
 
-            case IfElseStatement(condition, then_block, else_block):
+            case IfElseStatement():
                 # hello, past you here, no need to have a context/stack/a single global (bit) flag
                 # because there isnt anything you cant do outside
                 # of an if block you can only do inside an if block (e.g. while loops have break and continue
                 # ; and functions have return statements)
-                assert self.expression_datatype(condition) == "bool"
-                
-                scope_id = self.push_scope(parent_id) # the if part starts
-                self.analyze_statements(then_block.code, scope_id)
-                self.leave_scope() # the if part ends
-
-                scope_id = self.push_scope(parent_id) # the else part starts
-                self.analyze_statements(else_block.code, scope_id)
-                self.leave_scope() # the else part ends
-
-            case WhileStatement(condition, block):
-                assert self.expression_datatype(condition) == "bool"
+                condition_datatype = self.expression_datatype(statement.condition)
+                if condition_datatype != DATATYPE.BOOLEAN: 
+                    raise SystemExit("Expected BOOLEAN value in if-else statement condition, but got " + condition_datatype.value + " instead. " + statement.position)
                 
                 scope_id = self.push_scope(parent_id)
+                self.analyze_statements(statement.if_statement, scope_id)
+                self.leave_scope()
+
+                scope_id = self.push_scope(parent_id)
+                self.analyze_statements(statement.else_statement, scope_id)
+                self.leave_scope()
+
+            case WhileStatement():
+                condition_datatype = self.expression_datatype(statement.condition)
+                if condition_datatype != DATATYPE.BOOLEAN:
+                    raise SystemExit("Expected BOOLEAN value in while statement condition, but got " + condition_datatype.value + " instead. " + statement.position)
+
+                scope_id = self.push_scope(parent_id)
                 loops.enter_one()
-                self.analyze_statements(block.code, scope_id)
+                self.analyze_statements(statement.statement, scope_id)
                 loops.exit_one()
                 self.leave_scope()
 
-            case BreakStatement(): assert loops.is_in_one(), "break statements can only be used inside loops"
+            case BreakStatement():
+                if not loops.is_in_one():
+                    raise SystemExit("Code is not currently in a loop, so break statements are not allowed here: " + statement.position)    
                 
-            case ExpressionStatement(expression):
-                self.expression_datatype(expression) # i dont need the type, i just need it to check validity
+            case ExpressionStatement():
+                self.expression_datatype(statement.expression) # i dont need the type, i just need it to check validity
 
 
 
@@ -246,9 +257,9 @@ class SymbolTable():
                 # expected type is the type the function, that the return statement here lives in, is supposed to return
                 fn: FnSignature = functions.current_function()
 
-                assert self.expression_datatype(value) == fn.returns, f"Cannot return the datatype '{value}' from function '{fn.name}', because it is supposed to return '{fn.returns}'""""
+                assert self.expression_datatype(value) == fn.returns, f"Cannot return the datatype '{value}' from function '{fn.name}', because it is supposed to return '{fn.returns}'"""
 
-"""case ContinueStatement(): assert loops.is_in_one(), "continue statements can only be used inside loops""""
+"""case ContinueStatement(): assert loops.is_in_one(), "continue statements can only be used inside loops"""
 
 """case ExternFnStatement(fn_signature):
                 # in contrast to normal functions, DO NOT NEED TO PUSH SCOPE lesgo!!!!
