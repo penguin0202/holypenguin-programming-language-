@@ -4,6 +4,12 @@ from lexer import Token, Position
 from datatypes import DATATYPE
 
 @dataclass
+class ModuleStatement(): 
+    symbol_table: dict[str, DATATYPE]
+    code: list["Statement"]
+    position: Position
+
+@dataclass
 class BlockStatement(): 
     symbol_table: dict[str, DATATYPE]
     code: list["Statement"]
@@ -52,7 +58,7 @@ class ExpressionStatement():
     position: Position
 
 Statement = BlockStatement | EOFStatement | IntVarDeclStatement | BoolVarDeclStatement \
-    | BreakStatement | WhileStatement | IfElseStatement | IfStatement | ExpressionStatement
+    | BreakStatement | WhileStatement | IfElseStatement | IfStatement | ExpressionStatement | ModuleStatement
 
 """@dataclass
 class FnDeclStatement(): 

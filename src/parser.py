@@ -133,13 +133,13 @@ class Parser():
                 if not allow_assignment: raise SystemExit(f"AssignmentInExpression @ {left.position}")
                 self.advance()
                 right = self.parse_expression(precedence+1)
-                left = AssignmentExpression(left, right, self.e_pos)
+                left = AssignmentExpression(left, right, t.position)
             elif t.type in [TokenType.ADD, TokenType.SUB, TokenType.MUL, TokenType.DIV, TokenType.MOD
                           , TokenType.OR, TokenType.AND, TokenType.EQUAL_TO, TokenType.NOT_EQUAL_TO
                           , TokenType.LESS_THAN, TokenType.GREATER_THAN, TokenType.LESS_THAN_OR_EQUAL_TO, TokenType.GREATER_THAN_OR_EQUAL_TO]: 
                 self.advance()
                 right = self.parse_expression(precedence+1)
-                left = BinaryExprExpression(t.type, left, right, self.e_pos)
+                left = BinaryExprExpression(t.type, left, right, t.position)
 
         return left
 

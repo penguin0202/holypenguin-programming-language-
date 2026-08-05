@@ -1,10 +1,11 @@
 from dataclasses import dataclass
+from datatypes import DATATYPE
 
 @dataclass
 class VarSymbol(): 
-    datatype: str
+    datatype: DATATYPE
 
-class FnSymbol(): 
+"""class FnSymbol(): 
     def __init__(self, datatypes, names, returns): 
         self.overloads: list[FnSetItem] = []
         self.add_overload(datatypes, names, returns)
@@ -16,6 +17,6 @@ class FnSymbol():
 class FnSetItem(): 
     datatypes: list[str]
     names: list[str]
-    returns: str
+    returns: str"""
 
-Symbol = VarSymbol | FnSymbol
+Symbol = VarSymbol # | FnSymbol

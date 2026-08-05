@@ -1,7 +1,6 @@
 from lexer import *
 from parser import *
 from SymbolTypes import *
-from enum import Enum
 from datatypes import DATATYPE
 from StatementTypes import Statement
 
@@ -23,58 +22,39 @@ class Scope():
         self.parent_id = parent_id
     def symbol_exists(self, name) -> bool: 
         return name in self.symbols.keys()
-    def add_var(self, name, datatype: DATATYPE): 
+    def add_variable(self, name, datatype: DATATYPE, position: Position): 
+        if self.symbol_exists(name):
+            raise SystemExit(f"Symbol \"{name}\" with this name already exists in your current scope! Its datatype is {self.symbols[name]} and you are trying to add a new symbol with datatype {datatype} at {position}")
         self.symbols[name] = datatype
 
-class SymbolTable(): 
+class SemanticAnalyzer(): 
     def __init__(self): 
         self.next_id: int = 0
         self.current_id: int = -1
-        self.scopes: dict[int, Scope] = []
+        self.scopes: dict[int, Scope] = {}
     def push_scope(self, parent_id): # parent_id can be -1, to signal the module block, which has no parent
         self.current_id = self.next_id
         self.next_id+=1
         self.scopes[self.current_id] = Scope(parent_id)
         return self.current_id
     def leave_scope(self): # DO NOT POP; current scope will now refer to the parent scope of the current scope
-        self.current_id = self.scopes[self.current_id].parent_id
-    
-    def add_variable_symbol(self, name, datatype) -> None: 
-        assert not self.scopes[self.current_id].symbol_exists(name), f"Symbol ({name["kind"]}) with this name already exists in your current scope!" # shadowing present
-        self.scopes[self.current_id].symbols[name] = VarSymbol(datatype)
-        # overflows/underflows/div_by_0 will be runtime errors, as symbols only store name and datatypes
-    
-    
+        self.current_id = self.scopes[self.current_id].parent_id   
 
     # check if expression (not the datatype of it) is assignable
     # variables
     # array accesses (in the future)
     # member accesses (in the future)
     # function calls (if pointers are added, in the future)
-    def is_lvalue(expression: Expression) -> bool: 
+    def is_lvalue(self, expression: Expression) -> bool: 
         # next is array access
         # then next is dereferencing (also a function that returns a pointer)
         # if its member access, check every name
         # if its identifier, check if its a function, and then check if its toplevel
-        if type(expression) is IdentifierExpression:  
+        if isinstance(expression, IdentifierExpression):
             return True
         return False
 
-    # this symbol exists is unlike the Scope's symbol_exists
-    # this one goes through every parent scope starting from the current scope
-    # then finds stuff
-    def symbol_exists(self, name, id=None) -> bool: 
-        id = self.current_id if id is None else id
-         
-        if self.scopes[id].symbol_exists(name): 
-            return True
-        
-        if self.scopes[id].parent_id == -1: # no parent
-            return False
-        
-        return self.symbol_exists(name, self.scopes[id].parent_id)
-
-    def lookup_symbol(self, name, id=None) -> Symbol: 
+    def lookup_symbol_datatype(self, name, id=None) -> DATATYPE | None: 
         id = self.current_id if id is None else id
         
         if self.scopes[id].symbol_exists(name): 
@@ -82,77 +62,69 @@ class SymbolTable():
         
         # after a ton of recursion, if no scope at all has the symbol, and you reached the end
         # the end meaning the module scope, which has no parent_id, then say no symbol exists
-        assert self.scopes[id].parent_id != -1, "symbol does not exist anywhere"
+
+        if self.scopes[id].parent_id == -1: return None
         
-        return self.lookup_symbol(name, self.scopes[id].parent_id)
+        return self.lookup_symbol_datatype(name, self.scopes[id].parent_id)
 
     def ensure_datatype(self, given: DATATYPE, expected: DATATYPE, err_loc: str, position: Position) -> None: 
         if given != expected: 
-            raise SystemExit(f"Expected {expected.value} value in {err_loc}, but got {given.value} instead: {position}")
+            raise SystemExit(f"Expected {expected.name} value in {err_loc}, but got {given.name} instead: {position}")
 
     def expression_datatype(self, expression: Expression) -> DATATYPE: # None possibly, because of assignments, i dont know what to return from them
         # also handles assignment; the parser already checked that expressions can have - 
         # at most 1 assignment, and its position is going to be in expr_stmnt s
         match expression: 
+            case AssignmentExpression():
+                assert self.is_lvalue(expression.lvalue), "lvalue must be lvalue"
+                lvalue_datatype = self.expression_datatype(expression.lvalue)
+                rvalue_datatype = self.expression_datatype(expression.rvalue)
+                self.ensure_datatype(rvalue_datatype, lvalue_datatype, "assignment", expression.position)
+                return DATATYPE.VOID
+
             case IntLiteralExpression(): 
                 return DATATYPE.INTEGER
 
             case BoolLiteralExpression(): 
                 return DATATYPE.BOOLEAN
 
-            case IdentifierExpression(t): 
-                if not self.symbol_exists(name): raise Exception("Asdasdsadsda")
-
-            case IdentifierExpression(name): 
-                assert self.symbol_exists(name), "Undeclared Variable"
-                variable = self.lookup_symbol(name)
-                assert isinstance(variable, VarSymbol), "name referenced is not a variable, most likely its a function"
-                return variable["datatype"]
+            case IdentifierExpression(): 
+                variable = self.lookup_symbol_datatype(expression.name)
+                if variable is None:
+                    raise SystemExit(f"Variable does not exist anywhere in the current scope or any parent scopes: {expression.name} @ {expression.position}")
+                return variable
             
             case NegateExpression():
-                if self.expression_datatype(expression.operand) != DATATYPE.INTEGER: 
-                    raise Exception("Expected an integer value")
+                self.ensure_datatype(self.expression_datatype(expression.operand), DATATYPE.INTEGER, "negation", expression.position)
                 return DATATYPE.INTEGER
             
-            case NotExpression(operand):
-                operand_datatype = self.expression_datatype(operand)
-                if operand_datatype != DATATYPE.BOOLEAN: 
-                    raise Exception("Expected a boolean value")
+            case NotExpression():
+                self.ensure_datatype(self.expression_datatype(expression.operand), DATATYPE.BOOLEAN, "notion", expression.position)
                 return DATATYPE.BOOLEAN
             
-            case BinaryExprExpression(operator, left, right):
-                left_datatype = self.expression_datatype(left)
-                right_datatype = self.expression_datatype(right)
+            case BinaryExprExpression():
+                left_datatype = self.expression_datatype(expression.left)
+                right_datatype = self.expression_datatype(expression.right)
 
-                if operator in [TokenType.EQUAL_TO, TokenType.NOT_EQUAL_TO]: 
-                    return DATATYPE.BOOLEAN # don't need to check types?
+                match expression.operator:
+                    case TokenType.EQUAL_TO | TokenType.NOT_EQUAL_TO: 
+                        return DATATYPE.BOOLEAN # don't need to check types?
+                    case TokenType.LESS_THAN | TokenType.LESS_THAN_OR_EQUAL_TO | TokenType.GREATER_THAN | TokenType.GREATER_THAN_OR_EQUAL_TO:
+                        self.ensure_datatype(left_datatype, DATATYPE.INTEGER, "left operand of comparison operator", expression.position)
+                        self.ensure_datatype(right_datatype, DATATYPE.INTEGER, "right operand of comparison operator", expression.position)
+                        return DATATYPE.BOOLEAN
+                    case TokenType.AND | TokenType.OR:
+                        self.ensure_datatype(left_datatype, DATATYPE.BOOLEAN, "left operand of logical operator", expression.position)
+                        self.ensure_datatype(right_datatype, DATATYPE.BOOLEAN, "right operand of logical operator", expression.position)
+                        return DATATYPE.BOOLEAN
+                    case TokenType.ADD | TokenType.SUB | TokenType.MUL | TokenType.DIV | TokenType.MOD:
+                        self.ensure_datatype(left_datatype, DATATYPE.INTEGER, "left operand of arithmetic operator", expression.position)
+                        self.ensure_datatype(right_datatype, DATATYPE.INTEGER, "right operand of arithmetic operator", expression.position)
+                        return DATATYPE.INTEGER
                 
-                if operator in [TokenType.AND, TokenType.OR]: 
-                    self.ensure_datatype(left_datatype, DATATYPE.BOOLEAN, "left operand of logical operator", expression.position)
-
-                    if left_datatype != DATATYPE.BOOLEAN:
-                        raise Exception("Expected boolean value")
-                    if right_datatype != DATATYPE.BOOLEAN: 
-                        raise Exception("Expected bool value")
-                    return DATATYPE.BOOLEAN
-                
-                if operator in [TokenType.LESS_THAN, TokenType.LESS_THAN_OR_EQUAL_TO, TokenType.GREATER_THAN, TokenType.GREATER_THAN_OR_EQUAL_TO]:
-                    if left_datatype != DATATYPE.INTEGER:
-                        raise Exception("Expected integer value")
-                    if right_datatype != DATATYPE.INTEGER: 
-                        raise Exception("Expected integer value")
-                    return DATATYPE.BOOLEAN
-                
-                if operator in [TokenType.ADD, TokenType.SUB, TokenType.MUL, TokenType.DIV, TokenType.MOD]: 
-                    if left_datatype != DATATYPE.INTEGER:
-                        raise Exception("Expected integer value")
-                    if right_datatype != DATATYPE.INTEGER: 
-                        raise Exception("Expected integer value")
-                    return DATATYPE.INTEGER
-                
-                raise Exception("literally how")
+                raise SystemExit("literally how")
             
-        raise Exception("Waht kind of sick expression is this ya bum")
+        raise SystemExit("Waht kind of sick expression is this ya bum")
 
     # will modify statements (aka, the ast) in-place
     def analyze_statements(self, statements: list[Statement], parent_id) -> None: 
@@ -161,14 +133,19 @@ class SymbolTable():
 
     def analyze_statement(self, statement: Statement, parent_id) -> None: 
         match statement: 
-            case IntVarDeclStatement(name, datatype): 
-                self.add_variable_symbol(name, datatype)
-            
-            case BoolVarDeclStatement(name, datatype): 
-                self.add_variable_symbol(name, datatype)
 
-            case BlockStatement():
+            case IntVarDeclStatement(): 
+                self.scopes[self.current_id].add_variable(statement.name.value, DATATYPE.INTEGER, statement.name.position)
+            
+            case BoolVarDeclStatement(): 
+                self.scopes[self.current_id].add_variable(statement.name.value, DATATYPE.BOOLEAN, statement.name.position)
+
+            case BlockStatement() | ModuleStatement():
                 scope_id = self.push_scope(parent_id)
+
+
+
+
                 self.analyze_statements(statement.code, scope_id)
                 self.leave_scope()
 
@@ -178,11 +155,10 @@ class SymbolTable():
                 # of an if block you can only do inside an if block (e.g. while loops have break and continue
                 # ; and functions have return statements)
                 condition_datatype = self.expression_datatype(statement.condition)
-                if condition_datatype != DATATYPE.BOOLEAN:
-                    raise SystemExit("Expected BOOLEAN value in if statement condition, but got " + condition_datatype.value + " instead. " + statement.position)
+                self.ensure_datatype(condition_datatype, DATATYPE.BOOLEAN, "if statement condition", statement.condition.position)
 
                 scope_id = self.push_scope(parent_id)
-                self.analyze_statements(statement.statement, scope_id)
+                self.analyze_statement(statement.statement, scope_id)
                 self.leave_scope()
 
             case IfElseStatement():
@@ -191,32 +167,30 @@ class SymbolTable():
                 # of an if block you can only do inside an if block (e.g. while loops have break and continue
                 # ; and functions have return statements)
                 condition_datatype = self.expression_datatype(statement.condition)
-                if condition_datatype != DATATYPE.BOOLEAN: 
-                    raise SystemExit("Expected BOOLEAN value in if-else statement condition, but got " + condition_datatype.value + " instead. " + statement.position)
-                
+                self.ensure_datatype(condition_datatype, DATATYPE.BOOLEAN, "if-else statement condition", statement.condition.position)
+
                 scope_id = self.push_scope(parent_id)
-                self.analyze_statements(statement.if_statement, scope_id)
+                self.analyze_statement(statement.if_statement, scope_id)
                 self.leave_scope()
 
                 scope_id = self.push_scope(parent_id)
-                self.analyze_statements(statement.else_statement, scope_id)
+                self.analyze_statement(statement.else_statement, scope_id)
                 self.leave_scope()
 
             case WhileStatement():
                 condition_datatype = self.expression_datatype(statement.condition)
-                if condition_datatype != DATATYPE.BOOLEAN:
-                    raise SystemExit("Expected BOOLEAN value in while statement condition, but got " + condition_datatype.value + " instead. " + statement.position)
+                self.ensure_datatype(condition_datatype, DATATYPE.BOOLEAN, "while statement condition", statement.condition.position)
 
                 scope_id = self.push_scope(parent_id)
                 loops.enter_one()
-                self.analyze_statements(statement.statement, scope_id)
+                self.analyze_statement(statement.statement, scope_id)
                 loops.exit_one()
                 self.leave_scope()
 
             case BreakStatement():
                 if not loops.is_in_one():
-                    raise SystemExit("Code is not currently in a loop, so break statements are not allowed here: " + statement.position)    
-                
+                    raise SystemExit(f"Code is not currently in a loop, so break statements are not allowed here: {statement.position}")    
+
             case ExpressionStatement():
                 self.expression_datatype(statement.expression) # i dont need the type, i just need it to check validity
 
@@ -380,3 +354,17 @@ functions: FunctionContext = FunctionContext()"""
 
                     # modulo/remainder must have integer inputs (and integer output ofc too)
                     # modulo or remainder question unanswered
+
+"""# this symbol exists is unlike the Scope's symbol_exists
+# this one goes through every parent scope starting from the current scope
+# then finds stuff
+def symbol_exists(self, name, id=None) -> bool: 
+    id = self.current_id if id is None else id
+        
+    if self.scopes[id].symbol_exists(name): 
+        return True
+    
+    if self.scopes[id].parent_id == -1: # no parent cuz this is module statement
+        return False
+    
+    return self.symbol_exists(name, self.scopes[id].parent_id)"""
