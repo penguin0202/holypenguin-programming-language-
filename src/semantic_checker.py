@@ -142,10 +142,6 @@ class SemanticAnalyzer():
 
             case BlockStatement() | ModuleStatement():
                 scope_id = self.push_scope(parent_id)
-
-
-
-
                 self.analyze_statements(statement.code, scope_id)
                 self.leave_scope()
 
