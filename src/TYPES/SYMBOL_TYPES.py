@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datatypes import DATATYPE
+from TYPES.DATA_TYPES import DATATYPE
 
 @dataclass
 class VarSymbol(): 

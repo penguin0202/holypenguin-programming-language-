@@ -1,8 +1,8 @@
-from StatementTypes import *
-from ExpressionTypes import *
-from TOKEN_TYPES import *
+from TYPES.STATEMENT_TYPES import *
+from TYPES.EXPRESSION_TYPES import *
+from TYPES.TOKEN_TYPES import *
 
-class Transpiler(): 
+class Emitter(): 
     def transpile_expression(self, expression: Expression) -> str:
         match expression: 
             case IntLiteralExpression(): 

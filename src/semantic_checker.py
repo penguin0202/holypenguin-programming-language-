@@ -1,8 +1,8 @@
 from lexer import *
 from parser import *
-from SymbolTypes import *
-from datatypes import DATATYPE
-from StatementTypes import Statement
+from TYPES.SYMBOL_TYPES import *
+from TYPES.DATA_TYPES import DATATYPE
+from TYPES.STATEMENT_TYPES import Statement
 
 class LoopContext(): 
     def __init__(self): 

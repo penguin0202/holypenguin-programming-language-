@@ -4,7 +4,7 @@ from parser import Parser, EOFStatement, ModuleStatement
 from semantic_checker import SemanticAnalyzer
 import os
 from pprint import pprint
-from transpiler import *
+from emitter import *
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INPUT_FILENAME = os.path.join(SCRIPT_DIR, "test.txt")
@@ -33,7 +33,7 @@ while not isinstance(statement := parser.parse_statement(), EOFStatement):
 semantic_analyzer = SemanticAnalyzer()
 semantic_analyzer.analyze_statement(ast, -1)
 
-transpiler = Transpiler()
+transpiler = Emitter()
 
 final_code = transpiler.transpile_statement(ast)
 

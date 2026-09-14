@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from ExpressionTypes import Expression
+from TYPES.EXPRESSION_TYPES import Expression
 from lexer import Token, Position
-from datatypes import DATATYPE
+from TYPES.DATA_TYPES import DATATYPE
 
 @dataclass
 class ModuleStatement(): 

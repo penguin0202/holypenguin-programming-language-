@@ -1,7 +1,7 @@
 from lexer import Token, Position
-from TOKEN_TYPES import *
-from StatementTypes import *
-from ExpressionTypes import *
+from TYPES.TOKEN_TYPES import *
+from TYPES.STATEMENT_TYPES import *
+from TYPES.EXPRESSION_TYPES import *
 from dataclasses import dataclass, field
 from copy import copy
 

@@ -1,4 +1,4 @@
-from TOKEN_TYPES import *
+from TYPES.TOKEN_TYPES import *
 from dataclasses import dataclass, field
 from copy import copy
 
