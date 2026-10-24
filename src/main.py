@@ -33,8 +33,8 @@ while not isinstance(statement := parser.parse_statement(), EOFStatement):
 semantic_analyzer = SemanticAnalyzer()
 semantic_analyzer.analyze_statement(ast, -1)
 
-transpiler = Emitter()
-
-final_code = transpiler.transpile_statement(ast)
-
-exec(final_code)
+emitter = Emitter()
+emitter.emit_statement(ast)
+print(emitter.finish())
+with open("output.s", "w") as f:
+    f.write(emitter.emit_assembly())
