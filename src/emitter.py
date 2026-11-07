@@ -6,8 +6,30 @@ from llvmlite import ir, binding
 class Emitter(): 
     def __init__(self): 
         self.module = ir.Module(name="main")
+        self.module.triple = "x86_64-pc-windows-gnu"
         self.i32 = ir.IntType(32)
         self.i1 = ir.IntType(1)
+
+        self.i8 = ir.IntType(8)
+        self.i8p = self.i8.as_pointer()
+
+        printf_type = ir.FunctionType(
+            self.i32, [self.i8p], var_arg=True
+        )
+        scanf_type = ir.FunctionType(
+            self.i32, [self.i8p], var_arg=True
+        )
+        getchar_type = ir.FunctionType(self.i32, [])
+        
+        self.getchar = ir.Function(self.module, getchar_type, name="getchar")
+        self.printf = ir.Function(self.module, printf_type, name="printf")
+        self.scanf = ir.Function(self.module, scanf_type, name="scanf")
+
+        self.print_format = self.create_format_string(".print_fmt", "%d\n")
+        self.input_format = self.create_format_string(".input_fmt", "%d")
+        self.pause_format = self.create_format_string(
+            ".pause_fmt", "Press Enter key to continue . . ."
+        )
 
         self.variables = {}
         self.loop_end_blocks = []
@@ -19,6 +41,21 @@ class Emitter():
 
         entry = self.function.append_basic_block("entry")
         self.builder = ir.IRBuilder(entry)
+    def create_format_string(self, name, text):
+        string_type = ir.ArrayType(self.i8, len(text) + 1)
+
+        string = ir.GlobalVariable(
+            self.module, string_type, name=name
+        )
+
+        string.linkage = "private"
+        string.global_constant = True
+        string.initializer = ir.Constant(
+            string_type,
+            bytearray(text.encode("utf8") + b"\0")
+        )
+
+        return string
     def emit_expression(self, expression: Expression):
         match expression: 
             case IntLiteralExpression(): 
@@ -163,8 +200,61 @@ class Emitter():
                 self.emit_expression(statement.expression)
             case EOFStatement():
                 raise ValueError("EOFStatement not supported")
+            case PrintStatement(): 
+                value = self.emit_expression(statement.expression)
+
+                fmt = self.builder.gep(
+                    self.print_format,
+                    [ir.Constant(self.i32, 0), ir.Constant(self.i32, 0)],
+                    inbounds=True
+                )
+
+                self.builder.call(self.printf, [fmt, value])
+            case InputStatement(): 
+                variable_ptr = self.variables[statement.name.value]
+
+                fmt = self.builder.gep(
+                    self.input_format,
+                    [ir.Constant(self.i32, 0), ir.Constant(self.i32, 0)],
+                    inbounds=True
+                )
+
+                self.builder.call(self.scanf, [fmt, variable_ptr])
+
     def finish(self):
         if not self.builder.block.is_terminated:
+            loop = self.function.append_basic_block("flush.loop")
+            done = self.function.append_basic_block("flush.done")
+
+            self.builder.branch(loop)
+            self.builder.position_at_end(loop)
+
+            char = self.builder.call(self.getchar, [])
+
+            is_newline = self.builder.icmp_signed(
+                "==", char, ir.Constant(self.i32, 10)
+            )
+            is_eof = self.builder.icmp_signed(
+                "==", char, ir.Constant(self.i32, -1)
+            )
+
+            self.builder.cbranch(
+                self.builder.or_(is_newline, is_eof),
+                done,
+                loop
+            )
+
+            self.builder.position_at_end(done)
+
+            fmt = self.builder.gep(
+                self.pause_format,
+                [ir.Constant(self.i32, 0), ir.Constant(self.i32, 0)],
+                inbounds=True
+            )
+
+            self.builder.call(self.printf, [fmt])
+            self.builder.call(self.getchar, [])
+
             self.builder.ret(ir.Constant(self.i32, 0))
 
         return self.module
@@ -176,7 +266,11 @@ class Emitter():
         module = binding.parse_assembly(str(self.finish()))
         module.verify()
 
-        target = binding.Target.from_default_triple()
-        machine = target.create_target_machine(opt=0)
+        target = binding.Target.from_triple("x86_64-pc-windows-gnu")
+        target_machine = target.create_target_machine(opt=0, codemodel="default")
 
-        return machine.emit_assembly(module)
+        module.data_layout = str(target_machine.target_data)
+
+        print(target_machine.triple)
+
+        return target_machine.emit_assembly(module)

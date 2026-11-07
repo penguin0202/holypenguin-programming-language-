@@ -57,8 +57,19 @@ class ExpressionStatement():
     expression: Expression
     position: Position
 
+@dataclass
+class PrintStatement(): 
+    expression: Expression
+    position: Position
+
+@dataclass
+class InputStatement():
+    name: Token
+    position: Position
+
 Statement = BlockStatement | EOFStatement | IntVarDeclStatement | BoolVarDeclStatement \
-    | BreakStatement | WhileStatement | IfElseStatement | IfStatement | ExpressionStatement | ModuleStatement
+    | BreakStatement | WhileStatement | IfElseStatement | IfStatement | ExpressionStatement | ModuleStatement \
+    | PrintStatement | InputStatement
 
 """@dataclass
 class FnDeclStatement(): 

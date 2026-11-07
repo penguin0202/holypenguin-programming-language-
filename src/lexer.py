@@ -91,6 +91,9 @@ class Lexer():
                 case "true": return self.make_token(TokenType.LITERAL_BOOL, "true")
                 case "false": return self.make_token(TokenType.LITERAL_BOOL, "false")
 
+                case "print": return self.make_token(TokenType.KEYWORD_PRINT, None)
+                case "input": return self.make_token(TokenType.KEYWORD_INPUT, None)
+
             return self.make_token(TokenType.IDENTIFIER, word)
 
         if c in "0123456789": # i dont care about floats anymore

@@ -190,6 +190,16 @@ class SemanticAnalyzer():
             case ExpressionStatement():
                 self.expression_datatype(statement.expression) # i dont need the type, i just need it to check validity
 
+            case PrintStatement(): 
+                expression_datatype = self.expression_datatype(statement.expression)
+                self.ensure_datatype(expression_datatype, DATATYPE.INTEGER, "print statement expression", statement.expression.position)
+
+            case InputStatement(): 
+                variable_datatype = self.lookup_symbol_datatype(statement.name.value)
+                if variable_datatype is None:
+                    raise SystemExit(f"Variable does not exist: {statement.name.value} @ {statement.name.position}")
+                self.ensure_datatype(variable_datatype, DATATYPE.INTEGER, "input statement expression", statement.name.position)
+
 
 
 

@@ -202,6 +202,21 @@ class Parser():
             self.advance()
             self.consume(TokenType.SEMICOLON, "break statement")
             return BreakStatement(self.s_pos)
+
+        if t.type == TokenType.KEYWORD_PRINT: 
+            self.advance()
+            print_expression = self.parse_expression()
+            self.consume(TokenType.SEMICOLON, "print statement")
+            return PrintStatement(print_expression, self.s_pos)
+
+        if t.type == TokenType.KEYWORD_INPUT: 
+            self.advance()
+            t = self.peek()
+            self.ensure(t, TokenType.IDENTIFIER, "input must have variable name")
+            variable_name = copy(t)
+            self.advance()
+            self.consume(TokenType.SEMICOLON, "input statement")
+            return InputStatement(variable_name, self.s_pos)
         
         expression_statement = self.parse_expression(allow_assignment=True)
         self.consume(TokenType.SEMICOLON, "expression statement")

@@ -1,12 +1,9 @@
+print 500 + 600;
 
-int a; a = 6;
 
-67;
 
-while (5==5) {
-    5;
-}
+int a;
+input a;
 
-if (5 + 5>7) {
-    
-}
+a = a + 1;
+print a;

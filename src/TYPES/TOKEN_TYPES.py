@@ -12,6 +12,8 @@ class TokenType(Enum):
     KEYWORD_ELSE = auto(),
     KEYWORD_WHILE = auto(),
     KEYWORD_BREAK = auto(),
+    KEYWORD_PRINT = auto(),
+    KEYWORD_INPUT = auto(),
 
     DATATYPE_INT = auto(),
     DATATYPE_BOOL = auto(),

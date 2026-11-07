@@ -20,8 +20,6 @@ tokens: list[Token] = []
 while (token := lexer.next_token()).type != TokenType.EOF: 
     tokens.append(token)
 
-#pprint(tokens, indent=4)
-
 parser = Parser(tokens)
 
 ast = ModuleStatement({}, [], Position())
