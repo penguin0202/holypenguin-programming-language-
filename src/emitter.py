@@ -271,6 +271,10 @@ class Emitter():
 
         module.data_layout = str(target_machine.target_data)
 
-        print(target_machine.triple)
+        assembly = target_machine.emit_assembly(module)
 
-        return target_machine.emit_assembly(module)
+        # get rid of gcc error
+        assembly = assembly.replace(".seh_startepilogue\n", "")
+        assembly = assembly.replace(".seh_endepilogue\n", "")
+
+        return assembly

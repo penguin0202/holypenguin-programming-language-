@@ -52,9 +52,9 @@ main:
 	callq	printf
 	callq	getchar
 	xorl	%eax, %eax
-	addq	$48, %rsp
+		addq	$48, %rsp
 	popq	%rbp
-	retq
+		retq
 	.seh_endproc
 
 	.section	.rdata,"dr"
@@ -66,5 +66,5 @@ main:
 
 	.p2align	4, 0x0
 .L.pause_fmt:
-	.asciz	"Press any key to continue . . ."
+	.asciz	"Press Enter key to continue . . ."
 
