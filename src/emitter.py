@@ -13,12 +13,8 @@ class Emitter():
         self.i8 = ir.IntType(8)
         self.i8p = self.i8.as_pointer()
 
-        printf_type = ir.FunctionType(
-            self.i32, [self.i8p], var_arg=True
-        )
-        scanf_type = ir.FunctionType(
-            self.i32, [self.i8p], var_arg=True
-        )
+        printf_type = ir.FunctionType(self.i32, [self.i8p], var_arg=True)
+        scanf_type = ir.FunctionType(self.i32, [self.i8p], var_arg=True)
         getchar_type = ir.FunctionType(self.i32, [])
         
         self.getchar = ir.Function(self.module, getchar_type, name="getchar")
@@ -27,9 +23,7 @@ class Emitter():
 
         self.print_format = self.create_format_string(".print_fmt", "%d\n")
         self.input_format = self.create_format_string(".input_fmt", "%d")
-        self.pause_format = self.create_format_string(
-            ".pause_fmt", "Press Enter key to continue . . ."
-        )
+        self.pause_format = self.create_format_string(".pause_fmt", "Press Enter key to continue . . .")
 
         self.variables = {}
         self.loop_end_blocks = []
@@ -44,16 +38,11 @@ class Emitter():
     def create_format_string(self, name, text):
         string_type = ir.ArrayType(self.i8, len(text) + 1)
 
-        string = ir.GlobalVariable(
-            self.module, string_type, name=name
-        )
+        string = ir.GlobalVariable(self.module, string_type, name=name)
 
         string.linkage = "private"
         string.global_constant = True
-        string.initializer = ir.Constant(
-            string_type,
-            bytearray(text.encode("utf8") + b"\0")
-        )
+        string.initializer = ir.Constant(string_type, bytearray(text.encode("utf8") + b"\0"))
 
         return string
     def emit_expression(self, expression: Expression):

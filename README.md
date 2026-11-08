@@ -10,3 +10,13 @@ Instead, my code is just functions and variables (mostly dicts and strings)
 This is how I used to structure my code, before I learned about github: 
 <img width="1365" height="714" alt="image" src="https://github.com/user-attachments/assets/52b1f64d-ed8e-4e51-b622-bd2ee603f727" />
 Just thought I'd add that to show I wasn't just spawning the project out of nowhere (I'm really paranoid about not showing my work, just ask my math teacher)
+
+*Packages used*
+llvmlite -- life saver
+
+*Depencies*
+GCC compiler -- to translate assembly into an actual .exe file
+
+*shoutouts*
+match case pattern matching with classes
+union type combining multiple classes into one OMG this was life saver too
